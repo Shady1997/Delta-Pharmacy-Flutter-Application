@@ -20,11 +20,11 @@ class Order {
   factory Order.fromJson(Map<String, dynamic> json) {
     return Order(
       id: json['id'],
-      userId: json['userId'],
-      orderDate: json['orderDate'] ?? '',
+      userId: json['userId'] ?? json['user']?['id'] ?? 0,  // ← FIX HERE: Extract from user object
+      orderDate: json['createdAt'] ?? json['orderDate'] ?? '',  // ← FIX: Backend uses 'createdAt'
       totalAmount: json['totalAmount']?.toDouble() ?? 0.0,
       status: json['status'] ?? 'PENDING',
-      deliveryAddress: json['deliveryAddress'] ?? '',
+      deliveryAddress: json['shippingAddress'] ?? json['deliveryAddress'] ?? '',  // ← FIX: Backend uses 'shippingAddress'
       items: json['items'] ?? [],
     );
   }

@@ -1,8 +1,7 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-
 import '../../services/api_service.dart';
-import '../../screens/dashboard/dashboard_page.dart';
+import '../../utils/constants.dart';
+import '../dashboard/dashboard_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({Key? key}) : super(key: key);
@@ -12,10 +11,27 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _usernameController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   String _errorMessage = '';
   bool _isLoading = false;
+  String _selectedRole = 'Customer';
+
+  void _fillDemoCredentials(String role) {
+    setState(() {
+      _selectedRole = role;
+      if (role == 'Admin') {
+        _emailController.text = AppConstants.demoAdminEmail;
+        _passwordController.text = AppConstants.demoAdminPassword;
+      } else if (role == 'Pharmacist') {
+        _emailController.text = AppConstants.demoPharmacistEmail;
+        _passwordController.text = AppConstants.demoPharmacistPassword;
+      } else {
+        _emailController.text = AppConstants.demoCustomerEmail;
+        _passwordController.text = AppConstants.demoCustomerPassword;
+      }
+    });
+  }
 
   void _handleLogin() async {
     setState(() {
@@ -24,20 +40,26 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
-      await ApiService.login(
-        _usernameController.text,
+      final result = await ApiService.login(
+        _emailController.text,
         _passwordController.text,
       );
 
-      if (mounted) {
+      if (result['success'] == true && mounted) {
+        // Token and user are already set in AuthService.login()
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => const DashboardPage()),
         );
+      } else {
+        setState(() {
+          _errorMessage = result['error'] ?? 'Invalid credentials';
+          _isLoading = false;
+        });
       }
     } catch (e) {
       setState(() {
-        _errorMessage = 'Invalid credentials';
+        _errorMessage = 'Login failed: ${e.toString()}';
         _isLoading = false;
       });
     }
@@ -102,7 +124,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Admin Dashboard',
+                    'Management System',
                     style: TextStyle(
                       color: Colors.black54,
                       fontSize: 16,
@@ -126,11 +148,11 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ),
                   TextField(
-                    controller: _usernameController,
+                    controller: _emailController,
                     decoration: InputDecoration(
-                      labelText: 'Username',
-                      hintText: 'Enter your username',
-                      prefixIcon: const Icon(Icons.person),
+                      labelText: 'Email',
+                      hintText: 'Enter your email',
+                      prefixIcon: const Icon(Icons.email),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -192,25 +214,48 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                   const SizedBox(height: 24),
+                  const Divider(),
+                  const SizedBox(height: 16),
                   const Text(
                     'Demo Credentials:',
-                    style: TextStyle(fontSize: 12, color: Colors.black54),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Username: admin',
                     style: TextStyle(
-                      fontSize: 11,
-                      fontFamily: 'monospace',
-                      color: Colors.black54,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
                     ),
                   ),
-                  const Text(
-                    'Password: admin123',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontFamily: 'monospace',
-                      color: Colors.black54,
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildRoleButton('Admin', AppColors.adminColor),
+                      _buildRoleButton('Pharmacist', AppColors.pharmacistColor),
+                      _buildRoleButton('Customer', AppColors.customerColor),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          _selectedRole == 'Admin'
+                              ? '${AppConstants.demoAdminEmail}\n${AppConstants.demoAdminPassword}'
+                              : _selectedRole == 'Pharmacist'
+                              ? '${AppConstants.demoPharmacistEmail}\n${AppConstants.demoPharmacistPassword}'
+                              : '${AppConstants.demoCustomerEmail}\n${AppConstants.demoCustomerPassword}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontFamily: 'monospace',
+                            color: Colors.black87,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -218,6 +263,25 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildRoleButton(String role, Color color) {
+    final isSelected = _selectedRole == role;
+    return ElevatedButton(
+      onPressed: () => _fillDemoCredentials(role),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: isSelected ? color : Colors.grey.shade200,
+        foregroundColor: isSelected ? Colors.white : Colors.black87,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+      child: Text(
+        role,
+        style: const TextStyle(fontSize: 12),
       ),
     );
   }

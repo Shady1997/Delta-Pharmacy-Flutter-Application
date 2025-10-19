@@ -1,3 +1,12 @@
+import 'package:flutter/material.dart';
+import '../../services/api_service.dart';
+import '../../models/prescription.dart';
+import '../../models/user.dart';
+import '../../utils/date_formatter.dart';
+import '../../widgets/status_badge.dart';
+import '../prescriptions/prescription_details_page.dart';
+import '../prescriptions/prescription_review_dialog.dart';
+
 class PrescriptionsTab extends StatefulWidget {
   final Function(String, bool) onMessage;
 
@@ -8,8 +17,8 @@ class PrescriptionsTab extends StatefulWidget {
 }
 
 class _PrescriptionsTabState extends State<PrescriptionsTab> {
-  List<Prescription> prescriptions = [];
-  bool loading = false;
+  List<Prescription> _prescriptions = [];
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -18,45 +27,46 @@ class _PrescriptionsTabState extends State<PrescriptionsTab> {
   }
 
   Future<void> _loadPrescriptions() async {
-    setState(() => loading = true);
+    setState(() => _isLoading = true);
     try {
-      final fetchedPrescriptions = await ApiService.getPendingPrescriptions();
-      setState(() => prescriptions = fetchedPrescriptions);
+      final user = ApiService.currentUser;
+      if (user == null) return;
+
+      List<Prescription> prescriptions;
+      if (user.canApprovePrescriptions()) {
+        prescriptions = await ApiService.getPendingPrescriptions();
+      } else {
+        prescriptions = await ApiService.getUserPrescriptions(user.id);
+      }
+
+      setState(() => _prescriptions = prescriptions);
     } catch (e) {
-      widget.onMessage(e.toString(), true);
+      widget.onMessage('Failed to load prescriptions: ${e.toString()}', true);
     } finally {
-      setState(() => loading = false);
+      setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _approvePrescription(int id) async {
-    setState(() => loading = true);
+  Future<void> _handleReview(
+      int prescriptionId, bool approve, String? reason) async {
     try {
-      await ApiService.approvePrescription(id);
-      await _loadPrescriptions();
-      widget.onMessage('Prescription approved!', false);
+      if (approve) {
+        await ApiService.approvePrescription(prescriptionId);
+        widget.onMessage('Prescription approved successfully', false);
+      } else {
+        await ApiService.rejectPrescription(prescriptionId, reason ?? '');
+        widget.onMessage('Prescription rejected', false);
+      }
+      _loadPrescriptions();
     } catch (e) {
-      widget.onMessage(e.toString(), true);
-    } finally {
-      setState(() => loading = false);
-    }
-  }
-
-  Future<void> _rejectPrescription(int id, String reason) async {
-    setState(() => loading = true);
-    try {
-      await ApiService.rejectPrescription(id, reason);
-      await _loadPrescriptions();
-      widget.onMessage('Prescription rejected!', false);
-    } catch (e) {
-      widget.onMessage(e.toString(), true);
-    } finally {
-      setState(() => loading = false);
+      widget.onMessage('Failed to update prescription: ${e.toString()}', true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final user = ApiService.currentUser;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -65,22 +75,34 @@ class _PrescriptionsTabState extends State<PrescriptionsTab> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Prescription Review',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    user?.canApprovePrescriptions() == true
+                        ? 'Prescriptions Review'
+                        : 'My Prescriptions',
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    user?.canApprovePrescriptions() == true
+                        ? 'Review and approve customer prescriptions'
+                        : 'View your uploaded prescriptions',
+                    style: const TextStyle(color: Colors.black54),
+                  ),
+                ],
               ),
-              ElevatedButton.icon(
-                onPressed: _loadPrescriptions,
-                icon: const Icon(Icons.refresh, size: 16),
-                label: const Text('Refresh'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green.shade600,
-                  foregroundColor: Colors.white,
+              if (_isLoading)
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 24),
+
+          // Prescriptions Table
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
@@ -91,124 +113,118 @@ class _PrescriptionsTabState extends State<PrescriptionsTab> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Pending Prescriptions (${prescriptions.length})',
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  'Prescriptions (${_prescriptions.length})',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 16),
-                SingleChildScrollView(
+                _prescriptions.isEmpty
+                    ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Text('No prescriptions found'),
+                  ),
+                )
+                    : SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: DataTable(
-                    headingRowColor: MaterialStateProperty.all(Colors.purple.shade100),
-                    columns: const [
-                      DataColumn(label: Text('ID')),
-                      DataColumn(label: Text('User ID')),
-                      DataColumn(label: Text('File Name')),
-                      DataColumn(label: Text('Doctor')),
-                      DataColumn(label: Text('Status')),
-                      DataColumn(label: Text('Uploaded At')),
-                      DataColumn(label: Text('Actions')),
+                    headingRowColor: MaterialStateProperty.all(
+                      Colors.purple.shade100,
+                    ),
+                    columns: [
+                      const DataColumn(label: Text('ID')),
+                      if (user?.canApprovePrescriptions() == true)
+                        const DataColumn(label: Text('User ID')),
+                      const DataColumn(label: Text('File Name')),
+                      const DataColumn(label: Text('Doctor')),
+                      const DataColumn(label: Text('Uploaded')),
+                      const DataColumn(label: Text('Status')),
+                      const DataColumn(label: Text('Actions')),
                     ],
-                    rows: prescriptions
-                        .map(
-                          (prescription) => DataRow(
+                    rows: _prescriptions.map((prescription) {
+                      return DataRow(
                         cells: [
-                          DataCell(Text(prescription.id.toString())),
-                          DataCell(Text(prescription.userId.toString())),
-                          DataCell(Text(prescription.fileName)),
-                          DataCell(Text(prescription.doctorName ?? 'N/A')),
                           DataCell(
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: prescription.status == 'PENDING'
-                                    ? Colors.orange.shade200
-                                    : prescription.status == 'APPROVED'
-                                    ? Colors.green.shade200
-                                    : Colors.red.shade200,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
+                            InkWell(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        PrescriptionDetailsPage(
+                                            prescription: prescription),
+                                  ),
+                                );
+                              },
                               child: Text(
-                                prescription.status,
-                                style: const TextStyle(fontSize: 12),
+                                prescription.id.toString(),
+                                style: const TextStyle(
+                                  color: Colors.blue,
+                                  decoration: TextDecoration.underline,
+                                ),
                               ),
                             ),
                           ),
-                          DataCell(Text(
-                              prescription.uploadedAt.split('T')[0])),
+                          if (user?.canApprovePrescriptions() == true)
+                            DataCell(
+                                Text(prescription.userId.toString())),
+                          DataCell(Text(prescription.fileName)),
                           DataCell(
-                            Row(
+                              Text(prescription.doctorName ?? 'N/A')),
+                          DataCell(Text(DateFormatter.formatDate(
+                              prescription.uploadedAt))),
+                          DataCell(
+                            StatusBadge(
+                              status: prescription.status,
+                              type: 'prescription',
+                            ),
+                          ),
+                          DataCell(
+                            user?.canApprovePrescriptions() == true &&
+                                prescription.status == 'PENDING'
+                                ? Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
                                   icon: const Icon(Icons.check,
                                       color: Colors.green),
-                                  onPressed: () =>
-                                      _approvePrescription(prescription.id),
-                                  tooltip: 'Approve',
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.close,
-                                      color: Colors.red),
-                                  onPressed: () => _showRejectDialog(
-                                      prescription.id),
-                                  tooltip: 'Reject',
+                                  onPressed: () => showDialog(
+                                    context: context,
+                                    builder: (context) =>
+                                        PrescriptionReviewDialog(
+                                          prescriptionId:
+                                          prescription.id,
+                                          onReview: _handleReview,
+                                        ),
+                                  ),
+                                  tooltip: 'Review',
                                 ),
                               ],
+                            )
+                                : IconButton(
+                              icon: const Icon(Icons.visibility),
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        PrescriptionDetailsPage(
+                                            prescription:
+                                            prescription),
+                                  ),
+                                );
+                              },
                             ),
                           ),
                         ],
-                      ),
-                    )
-                        .toList(),
+                      );
+                    }).toList(),
                   ),
                 ),
-                if (prescriptions.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Center(
-                      child: Text(
-                        'No pending prescriptions',
-                        style: TextStyle(color: Colors.black54),
-                      ),
-                    ),
-                  ),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showRejectDialog(int id) {
-    final reasonController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Reject Prescription'),
-        content: TextField(
-          controller: reasonController,
-          decoration: const InputDecoration(
-            hintText: 'Enter rejection reason',
-            border: OutlineInputBorder(),
-          ),
-          maxLines: 3,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _rejectPrescription(id, reasonController.text);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
-            child: const Text('Reject'),
           ),
         ],
       ),

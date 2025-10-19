@@ -31,4 +31,17 @@ class Product {
       manufacturer: json['manufacturer'],
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'description': description,
+      'price': price,
+      'stockQuantity': stockQuantity,
+      'category': category,
+      'prescriptionRequired': prescriptionRequired,
+      'manufacturer': manufacturer,
+    };
+  }
 }

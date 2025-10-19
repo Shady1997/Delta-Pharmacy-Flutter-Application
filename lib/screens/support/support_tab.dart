@@ -1,3 +1,9 @@
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+
+import '../../models/support_ticket.dart';
+import '../../services/api_service.dart';
+
 class SupportTab extends StatefulWidget {
   final Function(String, bool) onMessage;
 

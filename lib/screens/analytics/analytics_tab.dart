@@ -1,6 +1,7 @@
-import 'package:flutter/cupertino.dart';
-
+import 'package:flutter/material.dart';
+import 'package:mobile_banking_flutter/screens/analytics/report_card.dart';
 import '../../services/api_service.dart';
+import '../../models/user.dart';
 
 class AnalyticsTab extends StatefulWidget {
   final Function(String, bool) onMessage;
@@ -12,9 +13,10 @@ class AnalyticsTab extends StatefulWidget {
 }
 
 class _AnalyticsTabState extends State<AnalyticsTab> {
-  Map<String, dynamic>? salesReport;
-  Map<String, dynamic>? inventoryReport;
-  bool loading = false;
+  bool _isLoading = false;
+  Map<String, dynamic> _salesReport = {};
+  Map<String, dynamic> _inventoryReport = {};
+  Map<String, dynamic> _usersReport = {};
 
   @override
   void initState() {
@@ -23,139 +25,122 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
   }
 
   Future<void> _loadReports() async {
-    setState(() => loading = true);
+    final user = ApiService.currentUser;
+
+    if (user?.canViewAnalytics() != true) {
+      return;
+    }
+
+    setState(() => _isLoading = true);
     try {
       final sales = await ApiService.getSalesReport();
       final inventory = await ApiService.getInventoryReport();
+
       setState(() {
-        salesReport = sales;
-        inventoryReport = inventory;
+        _salesReport = sales;
+        _inventoryReport = inventory;
       });
+
+      if (user?.isAdmin == true) {
+        final users = await ApiService.getUsersReport();
+        setState(() => _usersReport = users);
+      }
     } catch (e) {
-      widget.onMessage(e.toString(), true);
+      widget.onMessage('Failed to load reports: ${e.toString()}', true);
     } finally {
-      setState(() => loading = false);
+      setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Analytics & Reports',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              ElevatedButton.icon(
-                onPressed: _loadReports,
-                icon: const Icon(Icons.refresh, size: 16),
-                label: const Text('Refresh'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green.shade600,
-                  foregroundColor: Colors.white,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          if (loading)
-            const Center(child: CircularProgressIndicator())
-          else ...[
-            _buildReportCard(
-              'Sales Report',
-              salesReport,
-              Icons.attach_money,
-              Colors.green,
-            ),
+    final user = ApiService.currentUser;
+
+    if (user?.canViewAnalytics() != true) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.lock, size: 64, color: Colors.grey.shade400),
             const SizedBox(height: 16),
-            _buildReportCard(
-              'Inventory Report',
-              inventoryReport,
-              Icons.inventory,
-              Colors.blue,
+            const Text(
+              'Access Denied',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Analytics are only available for Admin and Pharmacist roles',
+              style: TextStyle(color: Colors.grey.shade600),
             ),
           ],
-        ],
-      ),
-    );
-  }
+        ),
+      );
+    }
 
-  Widget _buildReportCard(
-      String title,
-      Map<String, dynamic>? data,
-      IconData icon,
-      Color color,
-      ) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: color, size: 24),
-              ),
-              const SizedBox(width: 16),
-              Text(
-                title,
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-            ],
+    return SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+          const Text(
+          'Analytics & Reports',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+        ),
+        const Text(
+          'Business insights and performance metrics',
+          style: TextStyle(color: Colors.black54),
+        ),
+        const SizedBox(height: 24),
+
+        if (_isLoading)
+    const Center(child: CircularProgressIndicator())
+    else ...[
+    // Sales Report
+    ReportCard(
+    title: 'Sales Report',
+    data: _salesReport,
+    icon: Icons.attach_money,
+    color: Colors.green,
+    ),
+    const SizedBox(height: 16),
+
+          // Inventory Report
+          ReportCard(
+            title: 'Inventory Report',
+            data: _inventoryReport,
+            icon: Icons.inventory,
+            color: Colors.orange,
           ),
           const SizedBox(height: 16),
-          if (data != null && data.isNotEmpty)
-            ...data.entries.map((entry) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    entry.key,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  Text(
-                    entry.value.toString(),
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: color,
-                    ),
-                  ),
-                ],
-              ),
-            ))
-          else
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Center(
-                child: Text(
-                  'No data available',
-                  style: TextStyle(color: Colors.black54),
+
+          // Users Report (Admin only)
+          if (user?.isAdmin == true) ...[
+            ReportCard(
+              title: 'Users Report',
+              data: _usersReport,
+              icon: Icons.people,
+              color: Colors.blue,
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // Refresh Button
+          Center(
+            child: ElevatedButton.icon(
+              onPressed: _loadReports,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Refresh Reports'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
                 ),
               ),
             ),
+          ),
         ],
-      ),
+          ],
+        ),
     );
   }
 }

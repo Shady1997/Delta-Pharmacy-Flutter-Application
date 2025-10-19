@@ -1,3 +1,11 @@
+import 'package:flutter/material.dart';
+import '../../services/api_service.dart';
+import '../../models/order.dart';
+import '../../models/user.dart';
+import '../../utils/date_formatter.dart';
+import '../../widgets/status_badge.dart';
+import '../orders/order_details_page.dart';
+
 class OrdersTab extends StatefulWidget {
   final Function(String, bool) onMessage;
 
@@ -8,8 +16,15 @@ class OrdersTab extends StatefulWidget {
 }
 
 class _OrdersTabState extends State<OrdersTab> {
-  List<Order> orders = [];
-  bool loading = false;
+  List<Order> _orders = [];
+  bool _isLoading = false;
+  final _searchController = TextEditingController();
+
+  // Add these new variables
+  final _addressController = TextEditingController();
+  int _selectedProductId = 1;
+  int _quantity = 1;
+  String _paymentMethod = 'Credit Card';
 
   @override
   void initState() {
@@ -17,33 +32,48 @@ class _OrdersTabState extends State<OrdersTab> {
     _loadOrders();
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _addressController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadOrders() async {
-    setState(() => loading = true);
+    setState(() => _isLoading = true);
     try {
-      final fetchedOrders = await ApiService.getOrders();
-      setState(() => orders = fetchedOrders);
+      final user = ApiService.currentUser;
+      if (user == null) return;
+
+      List<Order> orders;
+      if (user.canViewAllOrders()) {
+        orders = await ApiService.getOrders();
+      } else {
+        orders = await ApiService.getUserOrders(user.id);
+      }
+
+      setState(() => _orders = orders);
     } catch (e) {
-      widget.onMessage(e.toString(), true);
+      widget.onMessage('Failed to load orders: ${e.toString()}', true);
     } finally {
-      setState(() => loading = false);
+      setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _updateOrderStatus(int id, String status) async {
-    setState(() => loading = true);
+  Future<void> _updateOrderStatus(int orderId, String newStatus) async {
     try {
-      await ApiService.updateOrderStatus(id, status);
-      await _loadOrders();
-      widget.onMessage('Order status updated!', false);
+      await ApiService.updateOrderStatus(orderId, newStatus);
+      widget.onMessage('Order status updated successfully', false);
+      _loadOrders();
     } catch (e) {
-      widget.onMessage(e.toString(), true);
-    } finally {
-      setState(() => loading = false);
+      widget.onMessage('Failed to update order: ${e.toString()}', true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final user = ApiService.currentUser;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -52,22 +82,197 @@ class _OrdersTabState extends State<OrdersTab> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Orders Management',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    user?.canViewAllOrders() == true
+                        ? 'Orders Management'
+                        : 'My Orders',
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    user?.canViewAllOrders() == true
+                        ? 'View and manage all customer orders'
+                        : 'Track your order history',
+                    style: const TextStyle(color: Colors.black54),
+                  ),
+                ],
               ),
-              ElevatedButton.icon(
-                onPressed: _loadOrders,
-                icon: const Icon(Icons.refresh, size: 16),
-                label: const Text('Refresh'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green.shade600,
-                  foregroundColor: Colors.white,
+              if (_isLoading)
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 24),
+
+          // Create Order Form (Customer only)
+          if (user?.isCustomer == true) ...[
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.add_shopping_cart, color: Colors.orange.shade700),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Create New Order',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Product Selection
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          decoration: InputDecoration(
+                            labelText: 'Product ID',
+                            hintText: 'Enter product ID',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            filled: true,
+                            fillColor: Colors.white,
+                            contentPadding: const EdgeInsets.all(12),
+                          ),
+                          keyboardType: TextInputType.number,
+                          onChanged: (value) {
+                            setState(() {
+                              _selectedProductId = int.tryParse(value) ?? 1;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          decoration: InputDecoration(
+                            labelText: 'Quantity',
+                            hintText: 'Enter quantity',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            filled: true,
+                            fillColor: Colors.white,
+                            contentPadding: const EdgeInsets.all(12),
+                          ),
+                          keyboardType: TextInputType.number,
+                          onChanged: (value) {
+                            setState(() {
+                              _quantity = int.tryParse(value) ?? 1;
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Shipping Address
+                  TextField(
+                    controller: _addressController,
+                    decoration: InputDecoration(
+                      labelText: 'Shipping Address',
+                      hintText: 'Enter delivery address',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                      contentPadding: const EdgeInsets.all(12),
+                    ),
+                    maxLines: 2,
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Payment Method
+                  DropdownButtonFormField<String>(
+                    value: _paymentMethod,
+                    decoration: InputDecoration(
+                      labelText: 'Payment Method',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                      contentPadding: const EdgeInsets.all(12),
+                    ),
+                    items: ['Credit Card', 'Debit Card', 'Cash on Delivery']
+                        .map((method) => DropdownMenuItem(
+                      value: method,
+                      child: Text(method),
+                    ))
+                        .toList(),
+                    onChanged: (value) {
+                      setState(() => _paymentMethod = value!);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Create Order Button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _isLoading ? null : _createOrder,
+                      icon: const Icon(Icons.shopping_cart_checkout),
+                      label: _isLoading
+                          ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                          : const Text('Create Order'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange.shade600,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+
+          // Search
+          TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Search orders by ID or address...',
+              prefixIcon: const Icon(Icons.search),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 24),
+
+          // Orders Table
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
@@ -78,91 +283,119 @@ class _OrdersTabState extends State<OrdersTab> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Orders List (${orders.length})',
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  'Orders (${_orders.length})',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 16),
-                SingleChildScrollView(
+                _orders.isEmpty
+                    ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Text('No orders found'),
+                  ),
+                )
+                    : SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: DataTable(
-                    headingRowColor: MaterialStateProperty.all(Colors.blue.shade100),
-                    columns: const [
-                      DataColumn(label: Text('Order ID')),
-                      DataColumn(label: Text('User ID')),
-                      DataColumn(label: Text('Date')),
-                      DataColumn(label: Text('Total Amount')),
-                      DataColumn(label: Text('Status')),
-                      DataColumn(label: Text('Actions')),
+                    headingRowColor: MaterialStateProperty.all(
+                      Colors.orange.shade100,
+                    ),
+                    columns: [
+                      const DataColumn(label: Text('Order ID')),
+                      if (user?.canViewAllOrders() == true)
+                        const DataColumn(label: Text('User ID')),
+                      const DataColumn(label: Text('Date')),
+                      const DataColumn(label: Text('Total')),
+                      const DataColumn(label: Text('Status')),
+                      const DataColumn(label: Text('Address')),
+                      const DataColumn(label: Text('Actions')),
                     ],
-                    rows: orders
-                        .map(
-                          (order) => DataRow(
+                    rows: _orders.map((order) {
+                      return DataRow(
                         cells: [
-                          DataCell(Text(order.id.toString())),
-                          DataCell(Text(order.userId.toString())),
-                          DataCell(Text(order.orderDate.split('T')[0])),
-                          DataCell(Text('\${order.totalAmount.toStringAsFixed(2)}')),
                           DataCell(
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: _getStatusColor(order.status),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
+                            InkWell(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        OrderDetailsPage(order: order),
+                                  ),
+                                );
+                              },
                               child: Text(
-                                order.status,
+                                order.id.toString(),
                                 style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white,
+                                  color: Colors.blue,
+                                  decoration: TextDecoration.underline,
                                 ),
                               ),
                             ),
                           ),
+                          if (user?.canViewAllOrders() == true)
+                            DataCell(Text(order.userId.toString())),
+                          DataCell(Text(
+                              DateFormatter.formatDate(order.orderDate))),
+                          DataCell(Text(
+                              '\$${order.totalAmount.toStringAsFixed(2)}')),
                           DataCell(
-                            PopupMenuButton<String>(
+                            StatusBadge(
+                              status: order.status,
+                              type: 'order',
+                            ),
+                          ),
+                          DataCell(
+                            SizedBox(
+                              width: 150,
+                              child: Text(
+                                order.deliveryAddress,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            user?.canUpdateOrderStatus() == true
+                                ? PopupMenuButton<String>(
+                              icon: const Icon(Icons.more_vert),
                               onSelected: (status) =>
-                                  _updateOrderStatus(order.id, status),
+                                  _updateOrderStatus(
+                                      order.id, status),
                               itemBuilder: (context) => [
-                                const PopupMenuItem(
-                                  value: 'PENDING',
-                                  child: Text('Set Pending'),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'PROCESSING',
-                                  child: Text('Set Processing'),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'SHIPPED',
-                                  child: Text('Set Shipped'),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'DELIVERED',
-                                  child: Text('Set Delivered'),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'CANCELLED',
-                                  child: Text('Cancel'),
-                                ),
-                              ],
+                                'PENDING',
+                                'PROCESSING',
+                                'SHIPPED',
+                                'DELIVERED',
+                                'CANCELLED'
+                              ]
+                                  .map((status) => PopupMenuItem(
+                                value: status,
+                                child: Text(status),
+                              ))
+                                  .toList(),
+                            )
+                                : IconButton(
+                              icon: const Icon(Icons.visibility),
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        OrderDetailsPage(
+                                            order: order),
+                                  ),
+                                );
+                              },
                             ),
                           ),
                         ],
-                      ),
-                    )
-                        .toList(),
+                      );
+                    }).toList(),
                   ),
                 ),
-                if (orders.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Center(
-                      child: Text(
-                        'No orders found',
-                        style: TextStyle(color: Colors.black54),
-                      ),
-                    ),
-                  ),
               ],
             ),
           ),
@@ -170,21 +403,56 @@ class _OrdersTabState extends State<OrdersTab> {
       ),
     );
   }
+  Future<void> _createOrder() async {
+    final user = ApiService.currentUser;
+    if (user == null) {
+      widget.onMessage('Please login first', true);
+      return;
+    }
 
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'PENDING':
-        return Colors.orange;
-      case 'PROCESSING':
-        return Colors.blue;
-      case 'SHIPPED':
-        return Colors.purple;
-      case 'DELIVERED':
-        return Colors.green;
-      case 'CANCELLED':
-        return Colors.red;
-      default:
-        return Colors.grey;
+    if (_addressController.text.isEmpty) {
+      widget.onMessage('Please enter shipping address', true);
+      return;
+    }
+
+    if (_selectedProductId <= 0 || _quantity <= 0) {
+      widget.onMessage('Please enter valid product ID and quantity', true);
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final orderData = {
+        'userId': user.id,
+        'items': [
+          {
+            'productId': _selectedProductId,
+            'quantity': _quantity,
+          }
+        ],
+        'shippingAddress': _addressController.text,
+        'paymentMethod': _paymentMethod,
+      };
+
+      await ApiService.createOrder(orderData);
+      widget.onMessage('Order created successfully!', false);
+
+      // Clear form
+      _addressController.clear();
+      setState(() {
+        _selectedProductId = 1;
+        _quantity = 1;
+        _paymentMethod = 'Credit Card';
+      });
+
+      // Reload orders
+      _loadOrders();
+    } catch (e) {
+      widget.onMessage('Failed to create order: ${e.toString()}', true);
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
+
 }
