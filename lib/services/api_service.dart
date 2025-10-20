@@ -144,41 +144,76 @@ class ApiService {
   }
 
   static Future<List<Prescription>> getUserPrescriptions(int userId) async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/prescriptions/$userId'),
-      headers: _getHeaders(),
-    );
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      List<dynamic> prescriptions = data['data'] ?? data;
-      return prescriptions.map((json) => Prescription.fromJson(json)).toList();
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/prescriptions/user/$userId'),  // ← Changed endpoint
+        headers: _getHeaders(),
+      );
+
+      print('Get User Prescriptions Status: ${response.statusCode}');
+      print('Get User Prescriptions Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          List<dynamic> prescriptions = data['data'] ?? [];
+          return prescriptions.map((json) => Prescription.fromJson(json)).toList();
+        }
+      }
+      return [];
+    } catch (e) {
+      print('Get User Prescriptions Error: $e');
+      return [];
     }
-    throw Exception('Failed to load user prescriptions');
   }
 
-  static Future<Prescription> approvePrescription(int id) async {
-    final response = await http.put(
-      Uri.parse('$baseUrl/prescriptions/$id/approve'),
-      headers: _getHeaders(),
-    );
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      return Prescription.fromJson(data['data']);
+  static Future<void> rejectPrescription(int id, String reason) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/prescriptions/$id/reject'),
+        headers: _getHeaders(),
+        body: json.encode({'reason': reason}),
+      );
+
+      print('Reject Prescription Status: ${response.statusCode}');
+      print('Reject Prescription Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          // Don't try to parse the response as Prescription object
+          return;  // Just return void on success
+        }
+      }
+      throw Exception('Failed to reject prescription');
+    } catch (e) {
+      print('Reject Prescription Error: $e');
+      rethrow;
     }
-    throw Exception(response.body);
   }
 
-  static Future<Prescription> rejectPrescription(int id, String reason) async {
-    final response = await http.put(
-      Uri.parse('$baseUrl/prescriptions/$id/reject'),
-      headers: _getHeaders(),
-      body: json.encode({'reason': reason}),
-    );
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      return Prescription.fromJson(data['data']);
+  static Future<void> approvePrescription(int id) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/prescriptions/$id/approve'),
+        headers: _getHeaders(),
+      );
+
+      print('Approve Prescription Status: ${response.statusCode}');
+      print('Approve Prescription Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          // Don't try to parse the response as Prescription object
+          return;  // Just return void on success
+        }
+      }
+      throw Exception('Failed to approve prescription');
+    } catch (e) {
+      print('Approve Prescription Error: $e');
+      rethrow;
     }
-    throw Exception(response.body);
   }
 
   // Support Tickets
@@ -334,4 +369,98 @@ class ApiService {
     }
     throw Exception('Failed to update user role');
   }
+  static Future<void> deleteUser(int userId) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/users/$userId'),
+      headers: _getHeaders(),
+    );
+
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw Exception('Failed to delete user');
+    }
+  }
+  // Support Tickets
+  static Future<SupportTicket> createSupportTicket(Map<String, dynamic> ticketData) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/support/ticket'),
+        headers: _getHeaders(),
+        body: json.encode(ticketData),
+      );
+
+      print('Create Ticket Status: ${response.statusCode}');
+      print('Create Ticket Body: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          return SupportTicket.fromJson(data['data']);
+        }
+      }
+      throw Exception('Failed to create support ticket');
+    } catch (e) {
+      print('Create Ticket Error: $e');
+      rethrow;
+    }
+  }
+  // Prescriptions
+  static Future<Prescription> uploadPrescription(Map<String, dynamic> prescriptionData) async {
+    try {
+      // Build query parameters
+      final queryParams = {
+        'userId': prescriptionData['userId'].toString(),
+        'fileName': prescriptionData['fileName'],
+        'fileType': prescriptionData['fileType'],
+        'doctorName': prescriptionData['doctorName'],
+        if (prescriptionData['notes'] != null) 'notes': prescriptionData['notes'],
+      };
+
+      final uri = Uri.parse('$baseUrl/prescriptions/upload').replace(queryParameters: queryParams);
+
+      print('Upload Prescription URL: $uri');
+
+      final response = await http.post(
+        uri,
+        headers: _getHeaders(),
+      );
+
+      print('Upload Prescription Status: ${response.statusCode}');
+      print('Upload Prescription Body: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          return Prescription.fromJson(data['data']);
+        }
+      }
+      throw Exception('Failed to upload prescription');
+    } catch (e) {
+      print('Upload Prescription Error: $e');
+      rethrow;
+    }
+  }
+  static Future<List<Prescription>> getAllPrescriptions() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/prescriptions'),
+        headers: _getHeaders(),
+      );
+
+      print('Get All Prescriptions Status: ${response.statusCode}');
+      print('Get All Prescriptions Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          List<dynamic> prescriptions = data['data'] ?? [];
+          return prescriptions.map((json) => Prescription.fromJson(json)).toList();
+        }
+      }
+      return [];
+    } catch (e) {
+      print('Get All Prescriptions Error: $e');
+      return [];
+    }
+  }
+
 }

@@ -491,10 +491,16 @@ class _UsersTabState extends State<UsersTab> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
-              // TODO: Implement user deletion API call
-              widget.onMessage('User deletion functionality coming soon', false);
-              Navigator.pop(context);
+            onPressed: () async {
+              try {
+                await ApiService.deleteUser(user.id);
+                Navigator.pop(context);
+                widget.onMessage('User deleted successfully', false);
+                _loadUsers();
+              } catch (e) {
+                Navigator.pop(context);
+                widget.onMessage('Failed to delete user: ${e.toString()}', true);
+              }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Delete'),

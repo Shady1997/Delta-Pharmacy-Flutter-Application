@@ -7,6 +7,8 @@ class Prescription {
   final String? notes;
   final String uploadedAt;
   final String? reviewedBy;
+  final String? reviewedAt;
+  final String? rejectionReason;
 
   Prescription({
     required this.id,
@@ -17,18 +19,24 @@ class Prescription {
     this.notes,
     required this.uploadedAt,
     this.reviewedBy,
+    this.reviewedAt,
+    this.rejectionReason,
   });
 
   factory Prescription.fromJson(Map<String, dynamic> json) {
     return Prescription(
-      id: json['id'],
-      userId: json['userId'],
-      fileName: json['fileName'],
+      id: json['id'] ?? 0,
+      userId: json['userId'] ?? json['user']?['id'] ?? 0,
+      fileName: json['fileName'] ?? '',
       status: json['status'] ?? 'PENDING',
       doctorName: json['doctorName'],
       notes: json['notes'],
-      uploadedAt: json['uploadedAt'] ?? '',
-      reviewedBy: json['reviewedBy'],
+      uploadedAt: json['uploadedAt'] ?? json['createdAt'] ?? '',
+      reviewedBy: json['reviewedBy'] is Map
+          ? json['reviewedBy']['fullName']  // ← Extract name from nested object
+          : json['reviewedBy'],
+      reviewedAt: json['reviewedAt'],
+      rejectionReason: json['rejectionReason'],
     );
   }
 }
