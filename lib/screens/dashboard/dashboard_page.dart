@@ -33,7 +33,6 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Reset index if it exceeds available pages
     final user = ApiService.currentUser;
     final pages = _getVisiblePages(user);
     if (_selectedIndex >= pages.length) {
@@ -98,7 +97,6 @@ class _DashboardPageState extends State<DashboardPage> {
         AnalyticsTab(onMessage: _showMessage),
       ];
     } else {
-      // Customer
       return [
         DashboardTab(onMessage: _showMessage),
         ProductsTab(onMessage: _showMessage),
@@ -146,8 +144,10 @@ class _DashboardPageState extends State<DashboardPage> {
     final user = ApiService.currentUser;
     final pages = _getVisiblePages(user);
     final tabs = _getVisibleTabs(user);
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    final isTablet = screenWidth >= 600 && screenWidth < 1024;
 
-    // Ensure selectedIndex is valid
     if (_selectedIndex >= pages.length && pages.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -156,6 +156,145 @@ class _DashboardPageState extends State<DashboardPage> {
       });
     }
 
+    // Use bottom navigation for mobile, top tabs for desktop
+    if (isMobile) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.local_pharmacy, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Delta Pharmacy',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      user?.getRoleDisplayName() ?? 'Dashboard',
+                      style: const TextStyle(fontSize: 11),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.blue.shade600,
+          foregroundColor: Colors.white,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.logout, size: 20),
+              onPressed: _handleLogout,
+              tooltip: 'Logout',
+            ),
+          ],
+        ),
+        body: Column(
+          children: [
+            // Messages
+            if (_errorMessage.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  border: Border(
+                    left: BorderSide(color: Colors.red.shade500, width: 4),
+                  ),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.error_outline, color: Colors.red.shade700, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _errorMessage,
+                        style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.close, color: Colors.red.shade700, size: 18),
+                      onPressed: () => setState(() => _errorMessage = ''),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+              ),
+            if (_successMessage.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  border: Border(
+                    left: BorderSide(color: Colors.green.shade500, width: 4),
+                  ),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle_outline, color: Colors.green.shade700, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _successMessage,
+                        style: TextStyle(color: Colors.green.shade700, fontSize: 12),
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.close, color: Colors.green.shade700, size: 18),
+                      onPressed: () => setState(() => _successMessage = ''),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+              ),
+            // Content
+            Expanded(
+              child: pages.isNotEmpty && _selectedIndex < pages.length
+                  ? pages[_selectedIndex]
+                  : _buildNoContentView(),
+            ),
+          ],
+        ),
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _selectedIndex,
+          onTap: (index) => setState(() => _selectedIndex = index),
+          type: BottomNavigationBarType.fixed,
+          selectedItemColor: Colors.blue.shade600,
+          unselectedItemColor: Colors.grey.shade600,
+          selectedFontSize: 11,
+          unselectedFontSize: 10,
+          items: tabs.map((tab) {
+            String label = tab.label;
+            if (label.length > 12) {
+              label = label.substring(0, 10) + '..';
+            }
+            return BottomNavigationBarItem(
+              icon: Icon(tab.icon, size: 22),
+              label: label,
+            );
+          }).toList(),
+        ),
+      );
+    }
+
+    // Desktop/Tablet layout with top tabs
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -172,8 +311,8 @@ class _DashboardPageState extends State<DashboardPage> {
           children: [
             // Header
             Container(
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(24),
+              margin: EdgeInsets.all(isTablet ? 12 : 16),
+              padding: EdgeInsets.all(isTablet ? 16 : 24),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
@@ -188,60 +327,73 @@ class _DashboardPageState extends State<DashboardPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade100,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          Icons.local_pharmacy,
-                          color: Colors.blue.shade700,
-                          size: 32,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Delta Pharmacy',
-                            style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blue.shade900,
-                            ),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: EdgeInsets.all(isTablet ? 8 : 12),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade100,
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          const SizedBox(height: 4),
-                          Row(
+                          child: Icon(
+                            Icons.local_pharmacy,
+                            color: Colors.blue.shade700,
+                            size: isTablet ? 24 : 32,
+                          ),
+                        ),
+                        SizedBox(width: isTablet ? 12 : 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                user?.getRoleDisplayName() ?? 'Dashboard',
-                                style: const TextStyle(
-                                  color: Colors.black54,
-                                  fontWeight: FontWeight.w500,
+                                'Delta Pharmacy',
+                                style: TextStyle(
+                                  fontSize: isTablet ? 18 : 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue.shade900,
                                 ),
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              if (user != null) ...[
-                                const SizedBox(width: 8),
-                                const Text('•',
-                                    style: TextStyle(color: Colors.black54)),
-                                const SizedBox(width: 8),
-                                Text(
-                                  user.email,
-                                  style: const TextStyle(
-                                    color: Colors.black54,
-                                    fontSize: 12,
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      user?.getRoleDisplayName() ?? 'Dashboard',
+                                      style: const TextStyle(
+                                        color: Colors.black54,
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 14,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                  if (user != null && !isTablet) ...[
+                                    const SizedBox(width: 8),
+                                    const Text('•',
+                                        style: TextStyle(color: Colors.black54)),
+                                    const SizedBox(width: 8),
+                                    Flexible(
+                                      child: Text(
+                                        user.email,
+                                        style: const TextStyle(
+                                          color: Colors.black54,
+                                          fontSize: 12,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
                             ],
                           ),
-                        ],
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ),
                   ElevatedButton.icon(
                     onPressed: _handleLogout,
@@ -250,9 +402,9 @@ class _DashboardPageState extends State<DashboardPage> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red.shade600,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isTablet ? 12 : 16,
+                        vertical: isTablet ? 10 : 12,
                       ),
                     ),
                   ),
@@ -346,7 +498,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   children: tabs.asMap().entries.map((entry) {
                     final index = entry.key;
                     final tab = entry.value;
-                    return _buildTab(index, tab.icon, tab.label);
+                    return _buildTab(index, tab.icon, tab.label, isTablet);
                   }).toList(),
                 ),
               ),
@@ -372,31 +524,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 ),
                 child: pages.isNotEmpty && _selectedIndex < pages.length
                     ? pages[_selectedIndex]
-                    : Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.error_outline,
-                        size: 64,
-                        color: Colors.grey.shade400,
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'No content available',
-                        style: TextStyle(
-                          fontSize: 18,
-                          color: Colors.black54,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      ElevatedButton(
-                        onPressed: _handleLogout,
-                        child: const Text('Back to Login'),
-                      ),
-                    ],
-                  ),
-                ),
+                    : _buildNoContentView(),
               ),
             ),
           ],
@@ -405,7 +533,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildTab(int index, IconData icon, String label) {
+  Widget _buildTab(int index, IconData icon, String label, bool isTablet) {
     final isSelected = _selectedIndex == index;
     return InkWell(
       onTap: () {
@@ -414,7 +542,10 @@ class _DashboardPageState extends State<DashboardPage> {
         });
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        padding: EdgeInsets.symmetric(
+          horizontal: isTablet ? 12 : 16,
+          vertical: isTablet ? 12 : 16,
+        ),
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
@@ -428,7 +559,7 @@ class _DashboardPageState extends State<DashboardPage> {
           children: [
             Icon(
               icon,
-              size: 20,
+              size: isTablet ? 18 : 20,
               color: isSelected ? Colors.blue.shade600 : Colors.black54,
             ),
             const SizedBox(width: 8),
@@ -436,11 +567,40 @@ class _DashboardPageState extends State<DashboardPage> {
               label,
               style: TextStyle(
                 fontWeight: FontWeight.w600,
+                fontSize: isTablet ? 13 : 14,
                 color: isSelected ? Colors.blue.shade600 : Colors.black54,
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildNoContentView() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.error_outline,
+            size: 64,
+            color: Colors.grey.shade400,
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'No content available',
+            style: TextStyle(
+              fontSize: 18,
+              color: Colors.black54,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ElevatedButton(
+            onPressed: _handleLogout,
+            child: const Text('Back to Login'),
+          ),
+        ],
       ),
     );
   }

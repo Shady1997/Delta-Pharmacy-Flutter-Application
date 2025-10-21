@@ -109,47 +109,117 @@ class _ProductsTabState extends State<ProductsTab> {
   @override
   Widget build(BuildContext context) {
     final user = ApiService.currentUser;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
+    return ListView(
+      padding: EdgeInsets.all(isMobile ? 12 : 24),
+      children: [
+        // Header
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Products Management',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontSize: isMobile ? 18 : 24,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   Text(
                     user?.isCustomer == true
                         ? 'Browse available medicines'
                         : 'Manage inventory and products',
-                    style: const TextStyle(color: Colors.black54),
+                    style: const TextStyle(color: Colors.black54, fontSize: 13),
                   ),
                 ],
               ),
-              if (_isLoading)
-                const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            if (_isLoading)
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Create Product Form (Admin only)
+        if (user?.canManageProducts() == true) ...[
+          ProductForm(onSubmit: _createProduct),
+          const SizedBox(height: 16),
+        ],
+
+        // Search and Filter
+        if (isMobile) ...[
+          // Mobile: Stack filters vertically
+          TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Search products...',
+              prefixIcon: const Icon(Icons.search),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: _filterCategory,
+                  decoration: InputDecoration(
+                    labelText: 'Category',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  ),
+                  items: ['All', 'Antibiotics', 'Pain Relief', 'Vitamins', 'Cold & Flu', 'Other']
+                      .map((category) => DropdownMenuItem(
+                    value: category,
+                    child: Text(category, style: const TextStyle(fontSize: 13)),
+                  ))
+                      .toList(),
+                  onChanged: (value) {
+                    setState(() => _filterCategory = value!);
+                    _filterProducts();
+                  },
                 ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Checkbox(
+                      value: _showPrescriptionOnly,
+                      onChanged: (value) {
+                        setState(() => _showPrescriptionOnly = value!);
+                        _filterProducts();
+                      },
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    const Text('Rx', style: TextStyle(fontSize: 12)),
+                  ],
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 24),
-
-          // Create Product Form (Admin only)
-          if (user?.canManageProducts() == true) ...[
-            ProductForm(onSubmit: _createProduct),
-            const SizedBox(height: 24),
-          ],
-
-          // Search and Filter
+        ] else ...[
+          // Desktop: Horizontal layout
           Row(
             children: [
               Expanded(
@@ -211,175 +281,188 @@ class _ProductsTabState extends State<ProductsTab> {
               ),
             ],
           ),
-          const SizedBox(height: 24),
+        ],
+        const SizedBox(height: 16),
 
-          // Products Table
+        // Products Table
+        Container(
+          padding: EdgeInsets.all(isMobile ? 12 : 24),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Products (${_filteredProducts.length})',
+                style: TextStyle(
+                  fontSize: isMobile ? 16 : 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              _filteredProducts.isEmpty
+                  ? const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Text('No products found'),
+                ),
+              )
+                  : SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  headingRowColor: MaterialStateProperty.all(
+                    Colors.blue.shade100,
+                  ),
+                  columnSpacing: isMobile ? 20 : 56,
+                  horizontalMargin: isMobile ? 8 : 24,
+                  dataRowHeight: isMobile ? 48 : 56,
+                  headingRowHeight: isMobile ? 40 : 56,
+                  columns: [
+                    DataColumn(label: Text('ID', style: TextStyle(fontSize: isMobile ? 12 : 14))),
+                    DataColumn(label: Text('Name', style: TextStyle(fontSize: isMobile ? 12 : 14))),
+                    DataColumn(label: Text('Category', style: TextStyle(fontSize: isMobile ? 12 : 14))),
+                    DataColumn(label: Text('Price', style: TextStyle(fontSize: isMobile ? 12 : 14))),
+                    DataColumn(label: Text('Stock', style: TextStyle(fontSize: isMobile ? 12 : 14))),
+                    DataColumn(label: Text('Rx', style: TextStyle(fontSize: isMobile ? 12 : 14))),
+                    if (user?.canManageProducts() == true)
+                      DataColumn(label: Text('Actions', style: TextStyle(fontSize: isMobile ? 12 : 14))),
+                  ],
+                  rows: _filteredProducts.map((product) {
+                    return DataRow(
+                      cells: [
+                        DataCell(Text(product.id.toString(), style: TextStyle(fontSize: isMobile ? 11 : 13))),
+                        DataCell(
+                          InkWell(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      ProductDetailsPage(product: product),
+                                ),
+                              );
+                            },
+                            child: Text(
+                              product.name,
+                              style: TextStyle(
+                                color: Colors.blue,
+                                decoration: TextDecoration.underline,
+                                fontSize: isMobile ? 11 : 13,
+                              ),
+                            ),
+                          ),
+                        ),
+                        DataCell(Text(product.category, style: TextStyle(fontSize: isMobile ? 11 : 13))),
+                        DataCell(Text(
+                            '\$${product.price.toStringAsFixed(2)}',
+                            style: TextStyle(fontSize: isMobile ? 11 : 13))),
+                        DataCell(
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: product.stockQuantity < 10
+                                  ? Colors.red.shade100
+                                  : Colors.green.shade100,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              product.stockQuantity.toString(),
+                              style: TextStyle(
+                                fontSize: isMobile ? 10 : 12,
+                                color: product.stockQuantity < 10
+                                    ? Colors.red.shade800
+                                    : Colors.green.shade800,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                        DataCell(
+                          product.prescriptionRequired
+                              ? const Icon(Icons.check,
+                              color: Colors.green, size: 20)
+                              : const Icon(Icons.close,
+                              color: Colors.red, size: 20),
+                        ),
+                        if (user?.canManageProducts() == true)
+                          DataCell(
+                            IconButton(
+                              icon: const Icon(Icons.delete,
+                                  color: Colors.red, size: 20),
+                              onPressed: () =>
+                                  _deleteProduct(product.id),
+                            ),
+                          ),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Low Stock Alert (Admin/Pharmacist only)
+        if (user?.canViewAnalytics() == true && _filteredProducts.any((p) => p.stockQuantity < 10)) ...[
+          const SizedBox(height: 16),
           Container(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.grey.shade50,
+              color: Colors.red.shade50,
               borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.red.shade200),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  'Products (${_filteredProducts.length})',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _filteredProducts.isEmpty
-                    ? const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Text('No products found'),
-                  ),
-                )
-                    : SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: DataTable(
-                    headingRowColor: MaterialStateProperty.all(
-                      Colors.blue.shade100,
+                Row(
+                  children: [
+                    Icon(Icons.warning, color: Colors.red.shade700, size: 20),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Low Stock Alert',
+                      style: TextStyle(
+                        fontSize: isMobile ? 14 : 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.red.shade900,
+                      ),
                     ),
-                    columns: [
-                      const DataColumn(label: Text('ID')),
-                      const DataColumn(label: Text('Name')),
-                      const DataColumn(label: Text('Category')),
-                      const DataColumn(label: Text('Price')),
-                      const DataColumn(label: Text('Stock')),
-                      const DataColumn(label: Text('Rx Required')),
-                      if (user?.canManageProducts() == true)
-                        const DataColumn(label: Text('Actions')),
-                    ],
-                    rows: _filteredProducts.map((product) {
-                      return DataRow(
-                        cells: [
-                          DataCell(Text(product.id.toString())),
-                          DataCell(
-                            InkWell(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        ProductDetailsPage(product: product),
-                                  ),
-                                );
-                              },
-                              child: Text(
-                                product.name,
-                                style: const TextStyle(
-                                  color: Colors.blue,
-                                  decoration: TextDecoration.underline,
-                                ),
-                              ),
-                            ),
-                          ),
-                          DataCell(Text(product.category)),
-                          DataCell(Text(
-                              '\$${product.price.toStringAsFixed(2)}')),
-                          DataCell(
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: product.stockQuantity < 10
-                                    ? Colors.red.shade100
-                                    : Colors.green.shade100,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                product.stockQuantity.toString(),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: product.stockQuantity < 10
-                                      ? Colors.red.shade800
-                                      : Colors.green.shade800,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                          DataCell(
-                            product.prescriptionRequired
-                                ? const Icon(Icons.check,
-                                color: Colors.green, size: 20)
-                                : const Icon(Icons.close,
-                                color: Colors.red, size: 20),
-                          ),
-                          if (user?.canManageProducts() == true)
-                            DataCell(
-                              IconButton(
-                                icon: const Icon(Icons.delete,
-                                    color: Colors.red),
-                                onPressed: () =>
-                                    _deleteProduct(product.id),
-                              ),
-                            ),
-                        ],
-                      );
-                    }).toList(),
-                  ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-
-          // Low Stock Alert (Admin/Pharmacist only)
-          if (user?.canViewAnalytics() == true) ...[
-            const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.shade200),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+                const SizedBox(height: 12),
+                ..._filteredProducts
+                    .where((p) => p.stockQuantity < 10)
+                    .map((product) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
                     children: [
-                      Icon(Icons.warning, color: Colors.red.shade700),
-                      const SizedBox(width: 12),
-                      Text(
-                        'Low Stock Alert',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.red.shade900,
+                      Icon(Icons.circle,
+                          size: 8, color: Colors.red.shade700),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${product.name} - Only ${product.stockQuantity} left',
+                          style: TextStyle(
+                            color: Colors.red.shade700,
+                            fontSize: isMobile ? 12 : 14,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  ..._filteredProducts
-                      .where((p) => p.stockQuantity < 10)
-                      .map((product) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      children: [
-                        Icon(Icons.circle,
-                            size: 8, color: Colors.red.shade700),
-                        const SizedBox(width: 8),
-                        Text(
-                          '${product.name} - Only ${product.stockQuantity} left',
-                          style: TextStyle(color: Colors.red.shade700),
-                        ),
-                      ],
-                    ),
-                  )),
-                ],
-              ),
+                )),
+              ],
             ),
-          ],
+          ),
         ],
-      ),
+      ],
     );
   }
 }

@@ -8,7 +8,7 @@ import '../models/support_ticket.dart';
 import 'auth_service.dart';
 
 class ApiService {
-  static const String baseUrl = 'http://localhost:8545/pharmacy-api/api';
+  static const String baseUrl = 'http://192.168.1.4:8545/pharmacy-api/api';
 
   static String? get authToken => AuthService.authToken;
   static User? get currentUser => AuthService.currentUser;
