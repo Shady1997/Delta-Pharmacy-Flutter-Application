@@ -337,96 +337,108 @@ class _SupportTabState extends State<SupportTab> {
                 children: _tickets.map((ticket) {
                   return Card(
                     margin: const EdgeInsets.only(bottom: 12),
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: _getPriorityColor(ticket.priority),
-                        child: Text(
-                          ticket.id.toString(),
-                          style: TextStyle(
-                            color: _getPriorityTextColor(ticket.priority),
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                      title: Text(
-                        ticket.subject,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Column(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const SizedBox(height: 4),
                           Row(
                             children: [
-                              Icon(
-                                Icons.flag,
-                                size: 12,
-                                color: _getPriorityTextColor(ticket.priority),
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                ticket.priority,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: _getPriorityTextColor(ticket.priority),
-                                  fontWeight: FontWeight.w600,
+                              CircleAvatar(
+                                backgroundColor: _getPriorityColor(ticket.priority),
+                                child: Text(
+                                  ticket.id.toString(),
+                                  style: TextStyle(
+                                    color: _getPriorityTextColor(ticket.priority),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 12),
-                              StatusBadge(
-                                status: ticket.status,
-                                type: 'ticket',
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      ticket.subject,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.flag,
+                                          size: 12,
+                                          color: _getPriorityTextColor(ticket.priority),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          ticket.priority,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: _getPriorityTextColor(ticket.priority),
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Flexible(
+                                          child: StatusBadge(
+                                            status: ticket.status,
+                                            type: 'ticket',
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      DateFormatter.formatDate(ticket.createdAt),
+                                      style: const TextStyle(fontSize: 11),
+                                    ),
+                                  ],
+                                ),
                               ),
+                              if (user?.canRespondToTickets() == true)
+                                PopupMenuButton<String>(
+                                  icon: const Icon(Icons.more_vert, size: 20),
+                                  padding: EdgeInsets.zero,
+                                  onSelected: (status) => _updateTicketStatus(ticket.id, status),
+                                  itemBuilder: (context) => [
+                                    'OPEN',
+                                    'IN_PROGRESS',
+                                    'RESOLVED',
+                                    'CLOSED'
+                                  ]
+                                      .map((status) => PopupMenuItem(
+                                    value: status,
+                                    child: Text(status,
+                                        style: const TextStyle(fontSize: 12)),
+                                  ))
+                                      .toList(),
+                                )
+                              else
+                                IconButton(
+                                  icon: const Icon(Icons.visibility, size: 20),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => TicketDetailsPage(ticket: ticket),
+                                      ),
+                                    );
+                                  },
+                                ),
                             ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            DateFormatter.formatDate(ticket.createdAt),
-                            style: const TextStyle(fontSize: 11),
                           ),
                         ],
                       ),
-                      trailing: user?.canRespondToTickets() == true
-                          ? PopupMenuButton<String>(
-                        icon: const Icon(Icons.more_vert, size: 20),
-                        onSelected: (status) =>
-                            _updateTicketStatus(ticket.id, status),
-                        itemBuilder: (context) => [
-                          'OPEN',
-                          'IN_PROGRESS',
-                          'RESOLVED',
-                          'CLOSED'
-                        ]
-                            .map((status) => PopupMenuItem(
-                          value: status,
-                          child: Text(status, style: const TextStyle(fontSize: 13)),
-                        ))
-                            .toList(),
-                      )
-                          : IconButton(
-                        icon: const Icon(Icons.visibility, size: 20),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  TicketDetailsPage(ticket: ticket),
-                            ),
-                          );
-                        },
-                      ),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                TicketDetailsPage(ticket: ticket),
-                          ),
-                        );
-                      },
                     ),
                   );
                 }).toList(),

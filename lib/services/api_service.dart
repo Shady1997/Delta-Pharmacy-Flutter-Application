@@ -8,7 +8,7 @@ import '../models/support_ticket.dart';
 import 'auth_service.dart';
 
 class ApiService {
-  static const String baseUrl = 'http://192.168.1.4:8545/pharmacy-api/api';
+  static const String baseUrl = 'http://192.168.1.104:8545/pharmacy-api/api';
 
   static String? get authToken => AuthService.authToken;
   static User? get currentUser => AuthService.currentUser;
@@ -461,6 +461,51 @@ class ApiService {
       print('Get All Prescriptions Error: $e');
       return [];
     }
+  }
+  // Dashboard
+  static Future<Map<String, dynamic>> getDashboardStats() async {
+    try {
+      print('Calling dashboard stats API...');
+      print('URL: $baseUrl/dashboard/stats');
+      print('Token: $authToken');
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/dashboard/stats'),
+        headers: _getHeaders(),
+      );
+
+      print('Dashboard Stats Status: ${response.statusCode}');
+      print('Dashboard Stats Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          return data['data'] as Map<String, dynamic>;
+        }
+      }
+      throw Exception('Failed to load dashboard stats: ${response.statusCode}');
+    } catch (e) {
+      print('Dashboard Stats Error: $e');
+      rethrow;
+    }
+  }
+
+  static Future<Map<String, dynamic>> getAnalytics() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/dashboard/analytics'),
+      headers: _getHeaders(),
+    );
+
+    print('Analytics Status: ${response.statusCode}');
+    print('Analytics Body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['success'] == true) {
+        return data['data'] as Map<String, dynamic>;
+      }
+    }
+    throw Exception('Failed to load analytics');
   }
 
 }

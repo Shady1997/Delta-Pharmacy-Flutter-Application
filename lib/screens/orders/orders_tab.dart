@@ -401,100 +401,115 @@ class _OrdersTabState extends State<OrdersTab> {
                 children: _orders.map((order) {
                   return Card(
                     margin: const EdgeInsets.only(bottom: 12),
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.orange.shade100,
-                        child: Text(
-                          order.id.toString(),
-                          style: TextStyle(
-                            color: Colors.orange.shade700,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                      title: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Order #${order.id}',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                            ),
-                          ),
-                          Text(
-                            '\$${order.totalAmount.toStringAsFixed(2)}',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blue.shade700,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                      subtitle: Column(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const SizedBox(height: 4),
-                          Text(
-                            order.deliveryAddress,
-                            style: const TextStyle(fontSize: 11),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 4),
                           Row(
                             children: [
-                              StatusBadge(
-                                status: order.status,
-                                type: 'order',
+                              CircleAvatar(
+                                backgroundColor: Colors.orange.shade100,
+                                child: Text(
+                                  order.id.toString(),
+                                  style: TextStyle(
+                                    color: Colors.orange.shade700,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
                               ),
-                              const SizedBox(width: 8),
-                              Text(
-                                DateFormatter.formatDate(order.orderDate),
-                                style: const TextStyle(fontSize: 11),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          'Order #${order.id}',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        Text(
+                                          '\$${order.totalAmount.toStringAsFixed(2)}',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.blue.shade700,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      order.deliveryAddress,
+                                      style: const TextStyle(fontSize: 11),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        Flexible(
+                                          child: StatusBadge(
+                                            status: order.status,
+                                            type: 'order',
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            DateFormatter.formatDate(order.orderDate),
+                                            style: const TextStyle(fontSize: 11),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
                               ),
+                              if (user?.canUpdateOrderStatus() == true)
+                                PopupMenuButton<String>(
+                                  icon: const Icon(Icons.more_vert, size: 20),
+                                  padding: EdgeInsets.zero,
+                                  onSelected: (status) => _updateOrderStatus(order.id, status),
+                                  itemBuilder: (context) => [
+                                    'PENDING',
+                                    'PROCESSING',
+                                    'SHIPPED',
+                                    'DELIVERED',
+                                    'CANCELLED'
+                                  ]
+                                      .map((status) => PopupMenuItem(
+                                    value: status,
+                                    child: Text(status,
+                                        style: const TextStyle(fontSize: 12)),
+                                  ))
+                                      .toList(),
+                                )
+                              else
+                                IconButton(
+                                  icon: const Icon(Icons.visibility, size: 20),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => OrderDetailsPage(order: order),
+                                      ),
+                                    );
+                                  },
+                                ),
                             ],
                           ),
                         ],
                       ),
-                      trailing: user?.canUpdateOrderStatus() == true
-                          ? PopupMenuButton<String>(
-                        icon: const Icon(Icons.more_vert, size: 20),
-                        onSelected: (status) =>
-                            _updateOrderStatus(order.id, status),
-                        itemBuilder: (context) => [
-                          'PENDING',
-                          'PROCESSING',
-                          'SHIPPED',
-                          'DELIVERED',
-                          'CANCELLED'
-                        ]
-                            .map((status) => PopupMenuItem(
-                          value: status,
-                          child: Text(status, style: const TextStyle(fontSize: 13)),
-                        ))
-                            .toList(),
-                      )
-                          : IconButton(
-                        icon: const Icon(Icons.visibility, size: 20),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  OrderDetailsPage(order: order),
-                            ),
-                          );
-                        },
-                      ),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => OrderDetailsPage(order: order),
-                          ),
-                        );
-                      },
                     ),
                   );
                 }).toList(),

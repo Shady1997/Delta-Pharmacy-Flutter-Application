@@ -46,7 +46,7 @@ class _LoginPageState extends State<LoginPage> {
       );
 
       if (result['success'] == true && mounted) {
-        // Token and user are already set in AuthService.login()
+        // Navigate immediately without waiting for other data
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => const DashboardPage()),
@@ -58,10 +58,12 @@ class _LoginPageState extends State<LoginPage> {
         });
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Login failed: ${e.toString()}';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Login failed: ${e.toString()}';
+          _isLoading = false;
+        });
+      }
     }
   }
 

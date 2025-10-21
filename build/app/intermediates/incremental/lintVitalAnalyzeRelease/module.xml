@@ -1,0 +1,18 @@
+<lint-module
+    format="1"
+    dir="C:\Users\g525585\AndroidStudioProjects\delta_pharmacy\android\app"
+    name=":app"
+    type="APP"
+    maven="android:app:"
+    agpVersion="8.1.0"
+    buildFolder="C:\Users\g525585\AndroidStudioProjects\delta_pharmacy\build\app"
+    bootClassPath="C:\Users\g525585\AppData\Local\Android\Sdk\platforms\android-34\android.jar;C:\Users\g525585\AppData\Local\Android\Sdk\build-tools\33.0.1\core-lambda-stubs.jar"
+    javaSourceLevel="1.8"
+    compileTarget="android-34">
+  <lintOptions
+      abortOnError="true"
+      absolutePaths="true"
+      checkReleaseBuilds="true"
+      explainIssues="true"/>
+  <variant name="release"/>
+</lint-module>

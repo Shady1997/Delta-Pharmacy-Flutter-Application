@@ -14,7 +14,7 @@ class DashboardTab extends StatefulWidget {
 
 class _DashboardTabState extends State<DashboardTab> {
   bool _isLoading = false;
-  Map<String, int> _stats = {};
+  Map<String, dynamic> _stats = {};
 
   @override
   void initState() {
@@ -26,22 +26,65 @@ class _DashboardTabState extends State<DashboardTab> {
     setState(() => _isLoading = true);
 
     try {
-      // Mock data - replace with actual API calls
-      setState(() {
-        _stats = {
-          'totalProducts': 150,
-          'pendingOrders': 12,
-          'pendingPrescriptions': 8,
-          'supportTickets': 5,
-          'totalUsers': 500,
-          'lowStock': 15,
-        };
-      });
+      final stats = await ApiService.getDashboardStats();
+      if (mounted) {
+        setState(() {
+          _stats = stats;
+        });
+      }
     } catch (e) {
-      widget.onMessage('Failed to load dashboard: ${e.toString()}', true);
+      print('Dashboard error: $e');  // Add this to see the error
+      // Don't show error to user, just use fallback data
+      if (mounted) {
+        setState(() {
+          _stats = _getFallbackStats();
+        });
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
+  }
+
+  Map<String, dynamic> _getFallbackStats() {
+    final user = ApiService.currentUser;
+    if (user?.isAdmin == true) {
+      return {
+        'totalProducts': 0,
+        'pendingOrders': 0,
+        'pendingPrescriptions': 0,
+        'supportTickets': 0,
+        'totalUsers': 0,
+        'lowStock': 0,
+      };
+    } else if (user?.isPharmacist == true) {
+      return {
+        'pendingPrescriptions': 0,
+        'pendingOrders': 0,
+        'supportTickets': 0,
+        'lowStock': 0,
+        'totalProducts': 0,
+      };
+    } else {
+      return {
+        'myOrders': 0,
+        'pendingOrders': 0,
+        'myPrescriptions': 0,
+        'pendingPrescriptions': 0,
+        'totalProducts': 0,
+        'myTickets': 0,
+      };
+    }
+  }
+
+  int _getStatValue(String key) {
+    final value = _stats[key];
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
   }
 
   @override
@@ -67,17 +110,32 @@ class _DashboardTabState extends State<DashboardTab> {
     return ListView(
       padding: EdgeInsets.all(isMobile ? 12 : 24),
       children: [
-        Text(
-          'Administrator Dashboard',
-          style: TextStyle(
-            fontSize: isMobile ? 18 : 24,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'Complete system overview and management',
-          style: TextStyle(color: Colors.black54, fontSize: 13),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Administrator Dashboard',
+                  style: TextStyle(
+                    fontSize: isMobile ? 18 : 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Complete system overview and management',
+                  style: TextStyle(color: Colors.black54, fontSize: 13),
+                ),
+              ],
+            ),
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loadDashboardData,
+              tooltip: 'Refresh',
+            ),
+          ],
         ),
         const SizedBox(height: 16),
         if (_isLoading)
@@ -93,7 +151,7 @@ class _DashboardTabState extends State<DashboardTab> {
             children: [
               StatCard(
                 title: 'Total Products',
-                value: _stats['totalProducts'].toString(),
+                value: _getStatValue('totalProducts').toString(),
                 icon: Icons.medication,
                 color: Colors.blue,
                 subtitle: 'In inventory',
@@ -101,7 +159,7 @@ class _DashboardTabState extends State<DashboardTab> {
               ),
               StatCard(
                 title: 'Pending Orders',
-                value: _stats['pendingOrders'].toString(),
+                value: _getStatValue('pendingOrders').toString(),
                 icon: Icons.shopping_cart,
                 color: Colors.orange,
                 subtitle: 'Needs processing',
@@ -109,7 +167,7 @@ class _DashboardTabState extends State<DashboardTab> {
               ),
               StatCard(
                 title: 'Pending Prescriptions',
-                value: _stats['pendingPrescriptions'].toString(),
+                value: _getStatValue('pendingPrescriptions').toString(),
                 icon: Icons.assignment,
                 color: Colors.purple,
                 subtitle: 'Awaiting review',
@@ -117,7 +175,7 @@ class _DashboardTabState extends State<DashboardTab> {
               ),
               StatCard(
                 title: 'Support Tickets',
-                value: _stats['supportTickets'].toString(),
+                value: _getStatValue('supportTickets').toString(),
                 icon: Icons.support_agent,
                 color: Colors.teal,
                 subtitle: 'Open tickets',
@@ -125,7 +183,7 @@ class _DashboardTabState extends State<DashboardTab> {
               ),
               StatCard(
                 title: 'Total Users',
-                value: _stats['totalUsers'].toString(),
+                value: _getStatValue('totalUsers').toString(),
                 icon: Icons.people,
                 color: Colors.green,
                 subtitle: 'Registered users',
@@ -133,7 +191,7 @@ class _DashboardTabState extends State<DashboardTab> {
               ),
               StatCard(
                 title: 'Low Stock Alert',
-                value: _stats['lowStock'].toString(),
+                value: _getStatValue('lowStock').toString(),
                 icon: Icons.warning,
                 color: Colors.red,
                 subtitle: 'Needs restock',
@@ -141,6 +199,46 @@ class _DashboardTabState extends State<DashboardTab> {
               ),
             ],
           ),
+        if (_stats.containsKey('totalRevenue')) ...[
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: EdgeInsets.all(isMobile ? 16 : 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Revenue Overview',
+                    style: TextStyle(
+                      fontSize: isMobile ? 16 : 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildRevenueStat(
+                        'Total Revenue',
+                        '\$${(_stats['totalRevenue'] ?? 0).toStringAsFixed(2)}',
+                        Icons.attach_money,
+                        Colors.green,
+                        isMobile,
+                      ),
+                      _buildRevenueStat(
+                        'Total Orders',
+                        _getStatValue('totalOrders').toString(),
+                        Icons.shopping_bag,
+                        Colors.blue,
+                        isMobile,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -149,17 +247,32 @@ class _DashboardTabState extends State<DashboardTab> {
     return ListView(
       padding: EdgeInsets.all(isMobile ? 12 : 24),
       children: [
-        Text(
-          'Pharmacist Dashboard',
-          style: TextStyle(
-            fontSize: isMobile ? 18 : 24,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'Prescription review and order management',
-          style: TextStyle(color: Colors.black54, fontSize: 13),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Pharmacist Dashboard',
+                  style: TextStyle(
+                    fontSize: isMobile ? 18 : 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Prescription review and order management',
+                  style: TextStyle(color: Colors.black54, fontSize: 13),
+                ),
+              ],
+            ),
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loadDashboardData,
+              tooltip: 'Refresh',
+            ),
+          ],
         ),
         const SizedBox(height: 16),
         if (_isLoading)
@@ -175,7 +288,7 @@ class _DashboardTabState extends State<DashboardTab> {
             children: [
               StatCard(
                 title: 'Pending Prescriptions',
-                value: _stats['pendingPrescriptions'].toString(),
+                value: _getStatValue('pendingPrescriptions').toString(),
                 icon: Icons.assignment,
                 color: Colors.purple,
                 subtitle: 'Needs your review',
@@ -183,7 +296,7 @@ class _DashboardTabState extends State<DashboardTab> {
               ),
               StatCard(
                 title: 'Pending Orders',
-                value: _stats['pendingOrders'].toString(),
+                value: _getStatValue('pendingOrders').toString(),
                 icon: Icons.shopping_cart,
                 color: Colors.orange,
                 subtitle: 'To be processed',
@@ -191,7 +304,7 @@ class _DashboardTabState extends State<DashboardTab> {
               ),
               StatCard(
                 title: 'Support Tickets',
-                value: _stats['supportTickets'].toString(),
+                value: _getStatValue('supportTickets').toString(),
                 icon: Icons.support_agent,
                 color: Colors.teal,
                 subtitle: 'Customer inquiries',
@@ -199,7 +312,7 @@ class _DashboardTabState extends State<DashboardTab> {
               ),
               StatCard(
                 title: 'Low Stock Alert',
-                value: _stats['lowStock'].toString(),
+                value: _getStatValue('lowStock').toString(),
                 icon: Icons.warning,
                 color: Colors.red,
                 subtitle: 'Check inventory',
@@ -215,73 +328,103 @@ class _DashboardTabState extends State<DashboardTab> {
     return ListView(
       padding: EdgeInsets.all(isMobile ? 12 : 24),
       children: [
-        Text(
-          'Welcome to Delta Pharmacy',
-          style: TextStyle(
-            fontSize: isMobile ? 18 : 24,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'Your health, our priority',
-          style: TextStyle(color: Colors.black54, fontSize: 13),
-        ),
-        const SizedBox(height: 16),
-        GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: isMobile ? 2 : 2,
-          crossAxisSpacing: isMobile ? 8 : 16,
-          mainAxisSpacing: isMobile ? 8 : 16,
-          childAspectRatio: isMobile ? 1.2 : 1.5,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            StatCard(
-              title: 'Browse Products',
-              value: '150+',
-              icon: Icons.medication,
-              color: Colors.blue,
-              subtitle: 'Available medicines',
-              isCompact: isMobile,
-              onTap: () {
-                // Navigate to products tab
-              },
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Welcome to Delta Pharmacy',
+                  style: TextStyle(
+                    fontSize: isMobile ? 18 : 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Your health, our priority',
+                  style: TextStyle(color: Colors.black54, fontSize: 13),
+                ),
+              ],
             ),
-            StatCard(
-              title: 'My Orders',
-              value: '3',
-              icon: Icons.shopping_cart,
-              color: Colors.orange,
-              subtitle: 'Active orders',
-              isCompact: isMobile,
-              onTap: () {
-                // Navigate to orders tab
-              },
-            ),
-            StatCard(
-              title: 'My Prescriptions',
-              value: '2',
-              icon: Icons.assignment,
-              color: Colors.purple,
-              subtitle: 'Uploaded prescriptions',
-              isCompact: isMobile,
-              onTap: () {
-                // Navigate to prescriptions tab
-              },
-            ),
-            StatCard(
-              title: 'Support',
-              value: '24/7',
-              icon: Icons.support_agent,
-              color: Colors.teal,
-              subtitle: 'We are here to help',
-              isCompact: isMobile,
-              onTap: () {
-                // Navigate to support tab
-              },
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loadDashboardData,
+              tooltip: 'Refresh',
             ),
           ],
         ),
+        const SizedBox(height: 16),
+        if (_isLoading)
+          const Center(child: CircularProgressIndicator())
+        else
+          GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: isMobile ? 2 : 2,
+            crossAxisSpacing: isMobile ? 8 : 16,
+            mainAxisSpacing: isMobile ? 8 : 16,
+            childAspectRatio: isMobile ? 1.2 : 1.5,
+            children: [
+              StatCard(
+                title: 'Browse Products',
+                value: _getStatValue('totalProducts').toString(),
+                icon: Icons.medication,
+                color: Colors.blue,
+                subtitle: 'Available medicines',
+                isCompact: isMobile,
+              ),
+              StatCard(
+                title: 'My Orders',
+                value: _getStatValue('myOrders').toString(),
+                icon: Icons.shopping_cart,
+                color: Colors.orange,
+                subtitle: 'Total orders',
+                isCompact: isMobile,
+              ),
+              StatCard(
+                title: 'My Prescriptions',
+                value: _getStatValue('myPrescriptions').toString(),
+                icon: Icons.assignment,
+                color: Colors.purple,
+                subtitle: 'Uploaded prescriptions',
+                isCompact: isMobile,
+              ),
+              StatCard(
+                title: 'Support Tickets',
+                value: _getStatValue('myTickets').toString(),
+                icon: Icons.support_agent,
+                color: Colors.teal,
+                subtitle: 'My tickets',
+                isCompact: isMobile,
+              ),
+            ],
+          ),
+        const SizedBox(height: 16),
+        if (_stats.containsKey('pendingOrders') && _getStatValue('pendingOrders') > 0) ...[
+          Card(
+            color: Colors.orange.shade50,
+            child: Padding(
+              padding: EdgeInsets.all(isMobile ? 16 : 20),
+              child: Row(
+                children: [
+                  Icon(Icons.info, color: Colors.orange.shade700),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'You have ${_getStatValue('pendingOrders')} pending order(s)',
+                      style: TextStyle(
+                        fontSize: isMobile ? 13 : 14,
+                        color: Colors.orange.shade900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
         Container(
           padding: EdgeInsets.all(isMobile ? 16 : 20),
@@ -296,7 +439,7 @@ class _DashboardTabState extends State<DashboardTab> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.info, color: Colors.blue.shade700, size: 20),
+                  Icon(Icons.info, color: Colors.blue.shade700),
                   const SizedBox(width: 12),
                   Text(
                     'Quick Tips',
@@ -335,6 +478,30 @@ class _DashboardTabState extends State<DashboardTab> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildRevenueStat(String title, String value, IconData icon, Color color, bool isMobile) {
+    return Column(
+      children: [
+        Icon(icon, size: isMobile ? 32 : 40, color: color),
+        const SizedBox(height: 8),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: isMobile ? 20 : 24,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: isMobile ? 12 : 14,
+            color: Colors.grey.shade700,
+          ),
+        ),
+      ],
     );
   }
 }
