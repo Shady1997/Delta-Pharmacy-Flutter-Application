@@ -1,5 +1,5 @@
 class ApiConfig {
-  static const String baseUrl = 'http://192.168.1.104:8545/pharmacy-api/api';
+  static const String baseUrl = 'http://192.168.1.4:8545/pharmacy-api/api';
 
   // Auth endpoints
   static const String login = '$baseUrl/auth/login';

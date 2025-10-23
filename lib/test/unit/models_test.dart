@@ -8,9 +8,11 @@ import '../../models/review.dart';
 import '../../models/support_ticket.dart';
 import '../../models/user.dart';
 import '../../models/notification.dart';
+import '../../models/notification.dart';
 
 
 void main() {
+
   group('User Model Tests', () {
     test('User.fromJson creates valid User object', () {
       final json = {
@@ -287,7 +289,8 @@ void main() {
         'createdAt': '2024-01-01T10:00:00',
       };
 
-      final notification = Notification.fromJson(json);
+
+      final notification = NotificationModel.fromJson(json);
 
       expect(notification.id, 1);
       expect(notification.userId, 123);
@@ -306,7 +309,7 @@ void main() {
         'createdAt': '2024-01-01',
       };
 
-      final notification = Notification.fromJson(json);
+      final notification = NotificationModel.fromJson(json);
 
       expect(notification.isRead, false);
     });

@@ -6,27 +6,49 @@ import '../models/order.dart';
 import '../models/prescription.dart';
 import '../models/support_ticket.dart';
 import 'auth_service.dart';
+import '../models/payment.dart';
+import '../models/notification.dart';
+import '../models/review.dart';
+
+import 'dart:io';
+import 'package:http/io_client.dart';
+
 
 class ApiService {
-  static const String baseUrl = 'http://192.168.1.104:8545/pharmacy-api/api';
+  static const String baseUrl = 'http://192.168.1.4:8545/pharmacy-api/api';
 
   static String? get authToken => AuthService.authToken;
+
   static User? get currentUser => AuthService.currentUser;
 
-  static Map<String, String> _getHeaders() {
-    return AuthService.getAuthHeaders();
+  // Create a single IOClient with proxy set up
+  static final IOClient ioClient = IOClient(
+    HttpClient()
+      ..findProxy = (uri) {
+        return "PROXY 192.168.1.4:8888;";
+      }
+      ..badCertificateCallback = (cert, host, port) => true, // optional: accept bad certs
+  );
+
+
+  static Map<String, String> getHeaders() {
+    return {
+      'Content-Type': 'application/json',
+      if (authToken != null) 'Authorization': 'Bearer $authToken',
+    };
   }
 
   // Auth
-  static Future<Map<String, dynamic>> login(String email, String password) async {
+  static Future<Map<String, dynamic>> login(
+      String email, String password) async {
     return await AuthService.login(email, password);
   }
 
   // Products
   static Future<List<Product>> getProducts() async {
-    final response = await http.get(
+    final response = await ioClient.get(
       Uri.parse('$baseUrl/products'),
-      headers: _getHeaders(),
+      headers: getHeaders(),
     );
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
@@ -37,9 +59,9 @@ class ApiService {
   }
 
   static Future<Product> createProduct(Map<String, dynamic> productData) async {
-    final response = await http.post(
+    final response = await ioClient.post(
       Uri.parse('$baseUrl/products'),
-      headers: _getHeaders(),
+      headers: getHeaders(),
       body: json.encode(productData),
     );
     if (response.statusCode == 200 || response.statusCode == 201) {
@@ -50,9 +72,9 @@ class ApiService {
   }
 
   static Future<void> deleteProduct(int id) async {
-    final response = await http.delete(
+    final response = await ioClient.delete(
       Uri.parse('$baseUrl/products/$id'),
-      headers: _getHeaders(),
+      headers: getHeaders(),
     );
     if (response.statusCode != 200 && response.statusCode != 204) {
       throw Exception('Failed to delete product');
@@ -60,9 +82,9 @@ class ApiService {
   }
 
   static Future<List<Product>> getLowStockProducts() async {
-    final response = await http.get(
+    final response = await ioClient.get(
       Uri.parse('$baseUrl/inventory/stock-levels'),
-      headers: _getHeaders(),
+      headers: getHeaders(),
     );
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
@@ -74,9 +96,9 @@ class ApiService {
 
   // Orders
   static Future<List<Order>> getOrders() async {
-    final response = await http.get(
+    final response = await ioClient.get(
       Uri.parse('$baseUrl/orders'),
-      headers: _getHeaders(),
+      headers: getHeaders(),
     );
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
@@ -89,9 +111,9 @@ class ApiService {
   static Future<List<Order>> getUserOrders(int userId) async {
     try {
       // Use the "get all orders" endpoint and filter on client side
-      final response = await http.get(
+      final response = await ioClient.get(
         Uri.parse('$baseUrl/orders'),
-        headers: _getHeaders(),
+        headers: getHeaders(),
       );
 
       print('Get Orders Status: ${response.statusCode}');
@@ -117,9 +139,9 @@ class ApiService {
   }
 
   static Future<Order> updateOrderStatus(int id, String status) async {
-    final response = await http.put(
+    final response = await ioClient.put(
       Uri.parse('$baseUrl/orders/$id/status'),
-      headers: _getHeaders(),
+      headers: getHeaders(),
       body: json.encode({'status': status}),
     );
     if (response.statusCode == 200) {
@@ -131,9 +153,9 @@ class ApiService {
 
   // Prescriptions
   static Future<List<Prescription>> getPendingPrescriptions() async {
-    final response = await http.get(
+    final response = await ioClient.get(
       Uri.parse('$baseUrl/prescriptions/pending'),
-      headers: _getHeaders(),
+      headers: getHeaders(),
     );
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
@@ -145,9 +167,9 @@ class ApiService {
 
   static Future<List<Prescription>> getUserPrescriptions(int userId) async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/prescriptions/user/$userId'),  // ← Changed endpoint
-        headers: _getHeaders(),
+      final response = await ioClient.get(
+        Uri.parse('$baseUrl/prescriptions/user/$userId'), // ← Changed endpoint
+        headers: getHeaders(),
       );
 
       print('Get User Prescriptions Status: ${response.statusCode}');
@@ -157,7 +179,9 @@ class ApiService {
         final data = json.decode(response.body);
         if (data['success'] == true) {
           List<dynamic> prescriptions = data['data'] ?? [];
-          return prescriptions.map((json) => Prescription.fromJson(json)).toList();
+          return prescriptions
+              .map((json) => Prescription.fromJson(json))
+              .toList();
         }
       }
       return [];
@@ -169,9 +193,9 @@ class ApiService {
 
   static Future<void> rejectPrescription(int id, String reason) async {
     try {
-      final response = await http.put(
+      final response = await ioClient.put(
         Uri.parse('$baseUrl/prescriptions/$id/reject'),
-        headers: _getHeaders(),
+        headers: getHeaders(),
         body: json.encode({'reason': reason}),
       );
 
@@ -182,7 +206,7 @@ class ApiService {
         final data = json.decode(response.body);
         if (data['success'] == true) {
           // Don't try to parse the response as Prescription object
-          return;  // Just return void on success
+          return; // Just return void on success
         }
       }
       throw Exception('Failed to reject prescription');
@@ -194,9 +218,9 @@ class ApiService {
 
   static Future<void> approvePrescription(int id) async {
     try {
-      final response = await http.put(
+      final response = await ioClient.put(
         Uri.parse('$baseUrl/prescriptions/$id/approve'),
-        headers: _getHeaders(),
+        headers: getHeaders(),
       );
 
       print('Approve Prescription Status: ${response.statusCode}');
@@ -206,7 +230,7 @@ class ApiService {
         final data = json.decode(response.body);
         if (data['success'] == true) {
           // Don't try to parse the response as Prescription object
-          return;  // Just return void on success
+          return; // Just return void on success
         }
       }
       throw Exception('Failed to approve prescription');
@@ -218,9 +242,9 @@ class ApiService {
 
   // Support Tickets
   static Future<List<SupportTicket>> getAllTickets() async {
-    final response = await http.get(
+    final response = await ioClient.get(
       Uri.parse('$baseUrl/support/tickets/all'),
-      headers: _getHeaders(),
+      headers: getHeaders(),
     );
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
@@ -231,9 +255,9 @@ class ApiService {
   }
 
   static Future<List<SupportTicket>> getUserTickets(int userId) async {
-    final response = await http.get(
+    final response = await ioClient.get(
       Uri.parse('$baseUrl/support/tickets?userId=$userId'),
-      headers: _getHeaders(),
+      headers: getHeaders(),
     );
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
@@ -244,9 +268,9 @@ class ApiService {
   }
 
   static Future<SupportTicket> updateTicketStatus(int id, String status) async {
-    final response = await http.put(
+    final response = await ioClient.put(
       Uri.parse('$baseUrl/support/ticket/$id/status'),
-      headers: _getHeaders(),
+      headers: getHeaders(),
       body: json.encode({'status': status}),
     );
     if (response.statusCode == 200) {
@@ -258,9 +282,9 @@ class ApiService {
 
   // Analytics
   static Future<Map<String, dynamic>> getSalesReport() async {
-    final response = await http.get(
+    final response = await ioClient.get(
       Uri.parse('$baseUrl/reports/sales'),
-      headers: _getHeaders(),
+      headers: getHeaders(),
     );
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
@@ -270,9 +294,9 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> getInventoryReport() async {
-    final response = await http.get(
+    final response = await ioClient.get(
       Uri.parse('$baseUrl/reports/inventory'),
-      headers: _getHeaders(),
+      headers: getHeaders(),
     );
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
@@ -282,9 +306,9 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> getUsersReport() async {
-    final response = await http.get(
+    final response = await ioClient.get(
       Uri.parse('$baseUrl/reports/users'),
-      headers: _getHeaders(),
+      headers: getHeaders(),
     );
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
@@ -295,9 +319,9 @@ class ApiService {
 
   // Users (Admin only)
   static Future<List<User>> getAllUsers() async {
-    final response = await http.get(
+    final response = await ioClient.get(
       Uri.parse('$baseUrl/users'),
-      headers: _getHeaders(),
+      headers: getHeaders(),
     );
 
     if (response.statusCode == 200) {
@@ -309,12 +333,13 @@ class ApiService {
     }
     throw Exception('Failed to load users');
   }
+
   // Orders
   static Future<Order> createOrder(Map<String, dynamic> orderData) async {
     try {
-      final response = await http.post(
+      final response = await ioClient.post(
         Uri.parse('$baseUrl/orders'),
-        headers: _getHeaders(),
+        headers: getHeaders(),
         body: json.encode(orderData),
       );
 
@@ -340,9 +365,9 @@ class ApiService {
 
   // Users (Admin only)
   static Future<User> createUser(Map<String, dynamic> userData) async {
-    final response = await http.post(
+    final response = await ioClient.post(
       Uri.parse('$baseUrl/auth/register'),
-      headers: _getHeaders(),
+      headers: getHeaders(),
       body: json.encode(userData),
     );
 
@@ -354,10 +379,11 @@ class ApiService {
     }
     throw Exception('Failed to create user');
   }
+
   static Future<User> updateUserRole(int userId, String role) async {
-    final response = await http.put(
+    final response = await ioClient.put(
       Uri.parse('$baseUrl/users/$userId/role'),
-      headers: _getHeaders(),
+      headers: getHeaders(),
       body: json.encode({'role': role}),
     );
 
@@ -369,22 +395,25 @@ class ApiService {
     }
     throw Exception('Failed to update user role');
   }
+
   static Future<void> deleteUser(int userId) async {
-    final response = await http.delete(
+    final response = await ioClient.delete(
       Uri.parse('$baseUrl/users/$userId'),
-      headers: _getHeaders(),
+      headers: getHeaders(),
     );
 
     if (response.statusCode != 200 && response.statusCode != 204) {
       throw Exception('Failed to delete user');
     }
   }
+
   // Support Tickets
-  static Future<SupportTicket> createSupportTicket(Map<String, dynamic> ticketData) async {
+  static Future<SupportTicket> createSupportTicket(
+      Map<String, dynamic> ticketData) async {
     try {
-      final response = await http.post(
+      final response = await ioClient.post(
         Uri.parse('$baseUrl/support/ticket'),
-        headers: _getHeaders(),
+        headers: getHeaders(),
         body: json.encode(ticketData),
       );
 
@@ -403,8 +432,10 @@ class ApiService {
       rethrow;
     }
   }
+
   // Prescriptions
-  static Future<Prescription> uploadPrescription(Map<String, dynamic> prescriptionData) async {
+  static Future<Prescription> uploadPrescription(
+      Map<String, dynamic> prescriptionData) async {
     try {
       // Build query parameters
       final queryParams = {
@@ -412,16 +443,18 @@ class ApiService {
         'fileName': prescriptionData['fileName'],
         'fileType': prescriptionData['fileType'],
         'doctorName': prescriptionData['doctorName'],
-        if (prescriptionData['notes'] != null) 'notes': prescriptionData['notes'],
+        if (prescriptionData['notes'] != null)
+          'notes': prescriptionData['notes'],
       };
 
-      final uri = Uri.parse('$baseUrl/prescriptions/upload').replace(queryParameters: queryParams);
+      final uri = Uri.parse('$baseUrl/prescriptions/upload')
+          .replace(queryParameters: queryParams);
 
       print('Upload Prescription URL: $uri');
 
-      final response = await http.post(
+      final response = await ioClient.post(
         uri,
-        headers: _getHeaders(),
+        headers: getHeaders(),
       );
 
       print('Upload Prescription Status: ${response.statusCode}');
@@ -439,11 +472,12 @@ class ApiService {
       rethrow;
     }
   }
+
   static Future<List<Prescription>> getAllPrescriptions() async {
     try {
-      final response = await http.get(
+      final response = await ioClient.get(
         Uri.parse('$baseUrl/prescriptions'),
-        headers: _getHeaders(),
+        headers: getHeaders(),
       );
 
       print('Get All Prescriptions Status: ${response.statusCode}');
@@ -453,7 +487,9 @@ class ApiService {
         final data = json.decode(response.body);
         if (data['success'] == true) {
           List<dynamic> prescriptions = data['data'] ?? [];
-          return prescriptions.map((json) => Prescription.fromJson(json)).toList();
+          return prescriptions
+              .map((json) => Prescription.fromJson(json))
+              .toList();
         }
       }
       return [];
@@ -462,6 +498,7 @@ class ApiService {
       return [];
     }
   }
+
   // Dashboard
   static Future<Map<String, dynamic>> getDashboardStats() async {
     try {
@@ -469,9 +506,9 @@ class ApiService {
       print('URL: $baseUrl/dashboard/stats');
       print('Token: $authToken');
 
-      final response = await http.get(
+      final response = await ioClient.get(
         Uri.parse('$baseUrl/dashboard/stats'),
-        headers: _getHeaders(),
+        headers: getHeaders(),
       );
 
       print('Dashboard Stats Status: ${response.statusCode}');
@@ -491,9 +528,9 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> getAnalytics() async {
-    final response = await http.get(
+    final response = await ioClient.get(
       Uri.parse('$baseUrl/dashboard/analytics'),
-      headers: _getHeaders(),
+      headers: getHeaders(),
     );
 
     print('Analytics Status: ${response.statusCode}');
@@ -508,4 +545,137 @@ class ApiService {
     throw Exception('Failed to load analytics');
   }
 
+  // Payments
+  static Future<Payment> initiatePayment(
+      Map<String, dynamic> paymentData) async {
+    final response = await ioClient.post(
+      Uri.parse('$baseUrl/payments/initiate'),
+      headers: getHeaders(),
+      body: json.encode(paymentData),
+    );
+
+    print('Initiate Payment Status: ${response.statusCode}');
+    print('Initiate Payment Body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['success'] == true) {
+        return Payment.fromJson(data['data']);
+      }
+    }
+    throw Exception('Failed to initiate payment');
+  }
+
+  static Future<Payment> verifyPayment(int paymentId) async {
+    final response = await ioClient.post(
+      Uri.parse('$baseUrl/payments/verify'),
+      headers: getHeaders(),
+      body: json.encode({'paymentId': paymentId}),
+    );
+
+    print('Verify Payment Status: ${response.statusCode}');
+    print('Verify Payment Body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['success'] == true) {
+        return Payment.fromJson(data['data']);
+      }
+    }
+    throw Exception('Failed to verify payment');
+  }
+
+  static Future<List<Payment>> getPaymentHistory(int userId) async {
+    final response = await ioClient.get(
+      Uri.parse('$baseUrl/payments/history?userId=$userId'),
+      headers: getHeaders(),
+    );
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['success'] == true) {
+        List<dynamic> payments = data['data'] ?? [];
+        return payments.map((json) => Payment.fromJson(json)).toList();
+      }
+    }
+    return [];
+  }
+
+// Notifications
+  static Future<List<NotificationModel>> getUserNotifications(
+      int userId) async {
+    final response = await ioClient.get(
+      Uri.parse('$baseUrl/notifications/$userId'),
+      headers: getHeaders(),
+    );
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['success'] == true) {
+        List<dynamic> notifications = data['data'] ?? [];
+        return notifications
+            .map((json) => NotificationModel.fromJson(json))
+            .toList();
+      }
+    }
+    return [];
+  }
+
+  static Future<List<NotificationModel>> getUnreadNotifications(
+      int userId) async {
+    final response = await ioClient.get(
+      Uri.parse('$baseUrl/notifications/$userId/unread'),
+      headers: getHeaders(),
+    );
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['success'] == true) {
+        List<dynamic> notifications = data['data'] ?? [];
+        return notifications
+            .map((json) => NotificationModel.fromJson(json))
+            .toList();
+      }
+    }
+    return [];
+  }
+
+  static Future<void> markNotificationAsRead(int notificationId) async {
+    await ioClient.put(
+      Uri.parse('$baseUrl/notifications/$notificationId/read'),
+      headers: getHeaders(),
+    );
+  }
+
+// Reviews
+  static Future<void> createReview(Map<String, dynamic> reviewData) async {
+    final response = await ioClient.post(
+      Uri.parse('$baseUrl/reviews'),
+      headers: getHeaders(),
+      body: json.encode(reviewData),
+    );
+
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception('Failed to submit review');
+    }
+  }
+
+  static Future<Map<String, dynamic>> getProductReviews(int productId) async {
+    final response = await ioClient.get(
+      Uri.parse('$baseUrl/reviews/$productId'),
+      headers: getHeaders(),
+    );
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['success'] == true) {
+        return data['data'] as Map<String, dynamic>;
+      }
+    }
+    return {
+      'reviews': [],
+      'averageRating': 0.0,
+      'totalReviews': 0,
+    };
+  }
 }

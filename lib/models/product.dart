@@ -3,32 +3,35 @@ class Product {
   final String name;
   final String description;
   final double price;
-  final int stockQuantity;
   final String category;
+  final int stockQuantity;
   final bool prescriptionRequired;
   final String? manufacturer;
+  final String? brand;
 
   Product({
     required this.id,
     required this.name,
-    required this.description,
+    this.description = '',
     required this.price,
-    required this.stockQuantity,
     required this.category,
+    required this.stockQuantity,
     required this.prescriptionRequired,
     this.manufacturer,
+    this.brand,
   });
 
   factory Product.fromJson(Map<String, dynamic> json) {
     return Product(
-      id: json['id'],
-      name: json['name'],
+      id: json['id'] ?? 0,
+      name: json['name'] ?? '',
       description: json['description'] ?? '',
-      price: json['price']?.toDouble() ?? 0.0,
-      stockQuantity: json['stockQuantity'] ?? 0,
+      price: (json['price'] ?? 0).toDouble(),
       category: json['category'] ?? '',
+      stockQuantity: json['stockQuantity'] ?? 0,
       prescriptionRequired: json['prescriptionRequired'] ?? false,
       manufacturer: json['manufacturer'],
+      brand: json['brand'],
     );
   }
 
@@ -38,10 +41,11 @@ class Product {
       'name': name,
       'description': description,
       'price': price,
-      'stockQuantity': stockQuantity,
       'category': category,
+      'stockQuantity': stockQuantity,
       'prescriptionRequired': prescriptionRequired,
       'manufacturer': manufacturer,
+      'brand': brand,
     };
   }
 }

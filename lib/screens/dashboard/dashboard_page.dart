@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../services/api_service.dart';
@@ -5,10 +7,12 @@ import '../../services/auth_service.dart';
 import '../../models/user.dart';
 import '../analytics/analytics_tab.dart';
 import '../auth/login_page.dart';
+import '../notifications/notifications_page.dart';
 import '../orders/orders_tab.dart';
 import '../prescriptions/prescriptions_tab.dart';
 import '../products/products_tab.dart';
 import '../support/support_tab.dart';
+import '../chat/chat_page.dart';
 import '../users/users_tab.dart';
 import 'dashboard_tab.dart';
 
@@ -24,10 +28,82 @@ class _DashboardPageState extends State<DashboardPage> {
   String _successMessage = '';
   String _errorMessage = '';
 
+  String _message = '';
+  bool _isError = false;
+  Timer? _notificationTimer;
+  int _unreadCount = 0;
+
   @override
   void initState() {
     super.initState();
+    _startNotificationPolling();
     _selectedIndex = 0;
+  }
+  @override
+  void dispose() {
+    _notificationTimer?.cancel();
+    super.dispose();
+  }
+  void _startNotificationPolling() {
+    _loadUnreadCount(); // Load immediately
+
+    // Poll every 30 seconds
+    _notificationTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      _loadUnreadCount();
+    });
+  }
+
+  // ⬇️⬇️⬇️ REPLACE THIS METHOD ⬇️⬇️⬇️
+  Future<void> _loadUnreadCount() async {
+    final user = ApiService.currentUser;
+    if (user == null) return;
+
+    try {
+      final notifications = await ApiService.getUnreadNotifications(user.id);
+      final newCount = notifications.length;
+
+      if (mounted) {
+        // Show toast if new notifications arrived
+        if (newCount > _unreadCount && _unreadCount > 0) {
+          final newNotifications = newCount - _unreadCount;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.notifications, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'You have $newNotifications new notification${newNotifications > 1 ? 's' : ''}',
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.blue.shade600,
+              duration: const Duration(seconds: 4),
+              action: SnackBarAction(
+                label: 'View',
+                textColor: Colors.white,
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const NotificationsPage(),
+                    ),
+                  ).then((_) => _loadUnreadCount());
+                },
+              ),
+            ),
+          );
+        }
+
+        setState(() {
+          _unreadCount = newCount;
+        });
+      }
+    } catch (e) {
+      // Silently fail
+    }
   }
 
   @override
@@ -194,6 +270,17 @@ class _DashboardPageState extends State<DashboardPage> {
           backgroundColor: Colors.blue.shade600,
           foregroundColor: Colors.white,
           actions: [
+            // Chat Button
+            IconButton(
+              icon: const Icon(Icons.chat_bubble_outline),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ChatPage()),
+                );
+              },
+              tooltip: 'Chat with Support',
+            ),
             IconButton(
               icon: const Icon(Icons.logout, size: 20),
               onPressed: _handleLogout,

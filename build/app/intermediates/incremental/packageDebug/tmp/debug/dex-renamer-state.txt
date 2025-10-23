@@ -1,4 +1,4 @@
-#Wed Oct 22 00:55:41 EET 2025
+#Thu Oct 23 05:49:07 EET 2025
 base.0=C\:\\Users\\g525585\\AndroidStudioProjects\\delta_pharmacy\\build\\app\\intermediates\\dex\\debug\\mergeExtDexDebug\\classes.dex
 base.1=C\:\\Users\\g525585\\AndroidStudioProjects\\delta_pharmacy\\build\\app\\intermediates\\dex\\debug\\mergeProjectDexDebug\\0\\classes.dex
 base.2=C\:\\Users\\g525585\\AndroidStudioProjects\\delta_pharmacy\\build\\app\\intermediates\\dex\\debug\\mergeProjectDexDebug\\1\\classes.dex

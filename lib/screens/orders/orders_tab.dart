@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import '../../services/api_service.dart';
 import '../../models/order.dart';
 import '../../models/user.dart';
+import '../../models/payment.dart';
 import '../../utils/date_formatter.dart';
 import '../../widgets/status_badge.dart';
 import '../orders/order_details_page.dart';
+import '../payments/payment_dialog.dart';
+
 
 class OrdersTab extends StatefulWidget {
   final Function(String, bool) onMessage;
@@ -90,23 +95,69 @@ class _OrdersTabState extends State<OrdersTab> {
         'paymentMethod': _paymentMethod,
       };
 
-      await ApiService.createOrder(orderData);
-      widget.onMessage('Order created successfully!', false);
+      final response = await http.post(
+        Uri.parse('${ApiService.baseUrl}/orders'),
+        headers: ApiService.getHeaders(),
+        body: json.encode(orderData),
+      );
 
-      // Clear form
-      _addressController.clear();
-      setState(() {
-        _selectedProductId = 1;
-        _quantity = 1;
-        _paymentMethod = 'Credit Card';
-      });
+      final data = json.decode(response.body);
 
-      // Reload orders
-      _loadOrders();
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        if (data['success'] == true) {
+          final order = Order.fromJson(data['data']);
+
+          // Show payment dialog
+          if (mounted) {
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (context) => PaymentDialog(
+                orderId: order.id,
+                userId: user.id,
+                amount: order.totalAmount,
+                onSuccess: (payment) {
+                  widget.onMessage(
+                    'Order placed and payment successful! Transaction: ${payment.transactionId}',
+                    false,
+                  );
+                  _addressController.clear();
+                  setState(() {
+                    _selectedProductId = 1;
+                    _quantity = 1;
+                    _paymentMethod = 'Credit Card';
+                  });
+                  _loadOrders();
+                },
+                onError: (error) {
+                  widget.onMessage('Payment failed: $error', true);
+                },
+              ),
+            );
+          }
+        } else {
+          throw Exception(data['message'] ?? 'Failed to create order');
+        }
+      } else if (response.statusCode == 400) {
+        // Handle prescription required error
+        String errorMsg = data['message'] ?? 'Bad request';
+        if (errorMsg.contains('prescription')) {
+          widget.onMessage(
+            'This product requires a prescription. Please upload and get approval for a prescription first, or use Product ID 1 (Paracetamol) which doesn\'t require prescription.',
+            true,
+          );
+        } else {
+          widget.onMessage(errorMsg, true);
+        }
+      } else {
+        throw Exception(data['message'] ?? 'Failed to create order: ${response.statusCode}');
+      }
     } catch (e) {
       widget.onMessage('Failed to create order: ${e.toString()}', true);
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -181,6 +232,7 @@ class _OrdersTabState extends State<OrdersTab> {
         const SizedBox(height: 16),
 
         // Create Order Form (Customer only)
+        // Create Order Form (Customer only)
         if (user?.isCustomer == true) ...[
           Container(
             padding: EdgeInsets.all(isMobile ? 16 : 24),
@@ -209,18 +261,46 @@ class _OrdersTabState extends State<OrdersTab> {
                 ),
                 const SizedBox(height: 16),
 
+                // Info Banner
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.blue.shade700, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Tip: Use Product ID 1 (Paracetamol 500mg) - no prescription required',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.blue.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
                 // Product Selection
                 if (isMobile) ...[
                   TextField(
                     decoration: InputDecoration(
                       labelText: 'Product ID',
-                      hintText: 'Enter product ID',
+                      hintText: 'Enter product ID (e.g., 1)',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
                       filled: true,
                       fillColor: Colors.white,
                       contentPadding: const EdgeInsets.all(12),
+                      helperText: 'ID 1: Paracetamol (no Rx), ID 2: Amoxicillin (needs Rx)',
+                      helperMaxLines: 2,
                     ),
                     keyboardType: TextInputType.number,
                     onChanged: (value) {
@@ -255,13 +335,14 @@ class _OrdersTabState extends State<OrdersTab> {
                         child: TextField(
                           decoration: InputDecoration(
                             labelText: 'Product ID',
-                            hintText: 'Enter product ID',
+                            hintText: 'Enter product ID (e.g., 1)',
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
                             filled: true,
                             fillColor: Colors.white,
                             contentPadding: const EdgeInsets.all(12),
+                            helperText: 'ID 1: Paracetamol (no Rx required)',
                           ),
                           keyboardType: TextInputType.number,
                           onChanged: (value) {
