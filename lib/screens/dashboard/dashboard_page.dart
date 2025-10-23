@@ -7,6 +7,7 @@ import '../../services/auth_service.dart';
 import '../../models/user.dart';
 import '../analytics/analytics_tab.dart';
 import '../auth/login_page.dart';
+import '../chat/chat_list_page.dart';
 import '../notifications/notifications_page.dart';
 import '../orders/orders_tab.dart';
 import '../prescriptions/prescriptions_tab.dart';
@@ -273,13 +274,24 @@ class _DashboardPageState extends State<DashboardPage> {
             // Chat Button
             IconButton(
               icon: const Icon(Icons.chat_bubble_outline),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const ChatPage()),
-                );
+              onPressed: () async {
+                final user = ApiService.currentUser;
+                if (user?.isCustomer == true) {
+                  // Customer chats directly with pharmacist
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const ChatPage()),
+                  );
+                } else {
+                  // Pharmacist/Admin sees list of conversations
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const ChatListPage()),
+                  );
+                }
+                _loadUnreadCount();
               },
-              tooltip: 'Chat with Support',
+              tooltip: 'Chat',
             ),
             IconButton(
               icon: const Icon(Icons.logout, size: 20),

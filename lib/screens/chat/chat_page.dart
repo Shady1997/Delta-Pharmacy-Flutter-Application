@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
+import 'dart:async';
 import '../../services/api_service.dart';
+import '../../models/chat_message.dart';
+import '../../models/user.dart';
 
 class ChatPage extends StatefulWidget {
-  const ChatPage({Key? key}) : super(key: key);
+  final User? chatWithUser;
+
+  const ChatPage({Key? key, this.chatWithUser}) : super(key: key);
 
   @override
   State<ChatPage> createState() => _ChatPageState();
@@ -13,30 +16,77 @@ class ChatPage extends StatefulWidget {
 class _ChatPageState extends State<ChatPage> {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
-  final List<ChatMessage> _messages = [];
+  List<ChatMessage> _messages = [];
   bool _isLoading = false;
+  bool _isSending = false;
+  User? _chatPartner;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
-    _addMessage(
-      'Hello! I\'m here to help. How can I assist you today?',
-      false,
-    );
+    _initializeChat();
   }
 
   @override
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    _refreshTimer?.cancel();
     super.dispose();
   }
 
-  void _addMessage(String text, bool isUser) {
-    setState(() {
-      _messages.add(ChatMessage(text: text, isUser: isUser));
+  Future<void> _initializeChat() async {
+    setState(() => _isLoading = true);
+
+    try {
+      // If chat partner not provided, find pharmacist/admin
+      if (widget.chatWithUser == null) {
+        _chatPartner = await ApiService.getPharmacistForChat();
+      } else {
+        _chatPartner = widget.chatWithUser;
+      }
+
+      await _loadMessages();
+      _startAutoRefresh();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to initialize chat: $e')),
+        );
+      }
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _startAutoRefresh() {
+    // Refresh messages every 5 seconds
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      _loadMessages(silent: true);
     });
-    _scrollToBottom();
+  }
+
+  Future<void> _loadMessages({bool silent = false}) async {
+    if (_chatPartner == null) return;
+
+    try {
+      final messages = await ApiService.getConversation(_chatPartner!.id);
+      if (mounted) {
+        setState(() {
+          _messages = messages;
+        });
+        if (!silent) {
+          _scrollToBottom();
+        }
+      }
+    } catch (e) {
+      if (!silent && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load messages: $e')),
+        );
+      }
+    }
   }
 
   void _scrollToBottom() {
@@ -52,54 +102,86 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _sendMessage() async {
+    if (_chatPartner == null) return;
+
     final message = _messageController.text.trim();
     if (message.isEmpty) return;
 
-    _addMessage(message, true);
+    setState(() => _isSending = true);
     _messageController.clear();
 
-    setState(() => _isLoading = true);
-
     try {
-      final response = await http.post(
-        Uri.parse('${ApiService.baseUrl}/chat'),
-        headers: ApiService.getHeaders(),
-        body: json.encode({'message': message}),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final reply = data['data'] ?? 'Sorry, I couldn\'t understand that.';
-        _addMessage(reply, false);
-      }
+      await ApiService.sendChatMessage(_chatPartner!.id, message);
+      await _loadMessages();
     } catch (e) {
-      _addMessage('Sorry, something went wrong. Please try again.', false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send message: $e')),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      setState(() => _isSending = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final currentUser = ApiService.currentUser;
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 600;
 
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Loading...'),
+          backgroundColor: Colors.blue.shade600,
+          foregroundColor: Colors.white,
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_chatPartner == null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Chat'),
+          backgroundColor: Colors.blue.shade600,
+          foregroundColor: Colors.white,
+        ),
+        body: const Center(
+          child: Text('No chat partner available'),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: const Row(
+        title: Row(
           children: [
             CircleAvatar(
               backgroundColor: Colors.white,
-              child: Icon(Icons.support_agent, color: Colors.blue),
+              child: Text(
+                _chatPartner!.fullName[0].toUpperCase(),
+                style: TextStyle(
+                  color: Colors.blue.shade600,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
-            SizedBox(width: 12),
+            const SizedBox(width: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Pharmacist Support', style: TextStyle(fontSize: 16)),
                 Text(
-                  'Usually replies instantly',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+                  _chatPartner!.fullName,
+                  style: const TextStyle(fontSize: 16),
+                ),
+                Text(
+                  _chatPartner!.getRoleDisplayName(),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.normal,
+                  ),
                 ),
               ],
             ),
@@ -107,39 +189,77 @@ class _ChatPageState extends State<ChatPage> {
         ),
         backgroundColor: Colors.blue.shade600,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => _loadMessages(),
+            tooltip: 'Refresh',
+          ),
+        ],
       ),
       body: Column(
         children: [
           // Messages List
           Expanded(
-            child: ListView.builder(
+            child: _messages.isEmpty
+                ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.chat_bubble_outline,
+                      size: 64, color: Colors.grey.shade400),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No messages yet',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Start the conversation!',
+                    style: TextStyle(fontSize: 14, color: Colors.grey),
+                  ),
+                ],
+              ),
+            )
+                : ListView.builder(
               controller: _scrollController,
               padding: EdgeInsets.all(isMobile ? 12 : 16),
               itemCount: _messages.length,
               itemBuilder: (context, index) {
                 final message = _messages[index];
-                return _buildMessageBubble(message, isMobile);
+                final isFromMe =
+                message.isFromCurrentUser(currentUser?.id ?? 0);
+                return _buildMessageBubble(message, isFromMe, isMobile);
               },
             ),
           ),
 
-          // Loading Indicator
-          if (_isLoading)
+          // Typing Indicator
+          if (_isSending)
             Padding(
               padding: const EdgeInsets.all(8),
               child: Row(
                 children: [
                   const SizedBox(width: 16),
-                  const CircleAvatar(
+                  CircleAvatar(
                     backgroundColor: Colors.grey,
                     radius: 12,
-                    child: Icon(Icons.support_agent, size: 16, color: Colors.white),
+                    child: Text(
+                      currentUser?.fullName[0].toUpperCase() ?? 'U',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade200,
+                      color: Colors.blue.shade100,
                       borderRadius: BorderRadius.circular(18),
                     ),
                     child: const Row(
@@ -151,7 +271,7 @@ class _ChatPageState extends State<ChatPage> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         ),
                         SizedBox(width: 8),
-                        Text('Typing...'),
+                        Text('Sending...'),
                       ],
                     ),
                   ),
@@ -191,13 +311,24 @@ class _ChatPageState extends State<ChatPage> {
                       ),
                     ),
                     onSubmitted: (_) => _sendMessage(),
+                    enabled: !_isSending,
                   ),
                 ),
                 const SizedBox(width: 8),
                 FloatingActionButton(
-                  onPressed: _isLoading ? null : _sendMessage,
-                  backgroundColor: Colors.blue.shade600,
-                  child: const Icon(Icons.send, color: Colors.white),
+                  onPressed: _isSending ? null : _sendMessage,
+                  backgroundColor:
+                  _isSending ? Colors.grey : Colors.blue.shade600,
+                  child: _isSending
+                      ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
+                      : const Icon(Icons.send, color: Colors.white),
                 ),
               ],
             ),
@@ -207,19 +338,27 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
-  Widget _buildMessageBubble(ChatMessage message, bool isMobile) {
+  Widget _buildMessageBubble(
+      ChatMessage message, bool isFromMe, bool isMobile) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         mainAxisAlignment:
-        message.isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        isFromMe ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          if (!message.isUser) ...[
-            const CircleAvatar(
+          if (!isFromMe) ...[
+            CircleAvatar(
               backgroundColor: Colors.blue,
               radius: 16,
-              child: Icon(Icons.support_agent, size: 20, color: Colors.white),
+              child: Text(
+                message.senderName[0].toUpperCase(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
             const SizedBox(width: 8),
           ],
@@ -230,33 +369,35 @@ class _ChatPageState extends State<ChatPage> {
                 vertical: isMobile ? 10 : 12,
               ),
               decoration: BoxDecoration(
-                color: message.isUser
-                    ? Colors.blue.shade600
-                    : Colors.grey.shade200,
+                color: isFromMe ? Colors.blue.shade600 : Colors.grey.shade200,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(18),
                   topRight: const Radius.circular(18),
-                  bottomLeft: Radius.circular(message.isUser ? 18 : 4),
-                  bottomRight: Radius.circular(message.isUser ? 4 : 18),
+                  bottomLeft: Radius.circular(isFromMe ? 18 : 4),
+                  bottomRight: Radius.circular(isFromMe ? 4 : 18),
                 ),
               ),
               child: Text(
-                message.text,
+                message.message,
                 style: TextStyle(
-                  color: message.isUser ? Colors.white : Colors.black87,
+                  color: isFromMe ? Colors.white : Colors.black87,
                   fontSize: isMobile ? 14 : 15,
                 ),
               ),
             ),
           ),
-          if (message.isUser) ...[
+          if (isFromMe) ...[
             const SizedBox(width: 8),
             CircleAvatar(
               backgroundColor: Colors.green,
               radius: 16,
               child: Text(
-                ApiService.currentUser?.fullName[0].toUpperCase() ?? 'U',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                message.senderName[0].toUpperCase(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ],
@@ -264,11 +405,4 @@ class _ChatPageState extends State<ChatPage> {
       ),
     );
   }
-}
-
-class ChatMessage {
-  final String text;
-  final bool isUser;
-
-  ChatMessage({required this.text, required this.isUser});
 }
