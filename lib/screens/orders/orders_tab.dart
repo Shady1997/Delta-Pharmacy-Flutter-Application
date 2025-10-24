@@ -107,33 +107,39 @@ class _OrdersTabState extends State<OrdersTab> {
         if (data['success'] == true) {
           final order = Order.fromJson(data['data']);
 
-          // Show payment dialog
-          if (mounted) {
-            showDialog(
-              context: context,
-              barrierDismissible: false,
-              builder: (context) => PaymentDialog(
-                orderId: order.id,
-                userId: user.id,
-                amount: order.totalAmount,
-                onSuccess: (payment) {
-                  widget.onMessage(
-                    'Order placed and payment successful! Transaction: ${payment.transactionId}',
-                    false,
-                  );
-                  _addressController.clear();
-                  setState(() {
-                    _selectedProductId = 1;
-                    _quantity = 1;
-                    _paymentMethod = 'Credit Card';
-                  });
-                  _loadOrders();
-                },
-                onError: (error) {
-                  widget.onMessage('Payment failed: $error', true);
-                },
-              ),
+          // Check payment method - only show payment dialog for card payments
+          if (_paymentMethod == 'Credit Card' || _paymentMethod == 'Debit Card') {
+            // Show payment dialog for card payments
+            if (mounted) {
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => PaymentDialog(
+                  orderId: order.id,
+                  userId: user.id,
+                  amount: order.totalAmount,
+                  onSuccess: (payment) {
+                    widget.onMessage(
+                      'Order placed and payment successful! Transaction: ${payment.transactionId}',
+                      false,
+                    );
+                    _clearForm();
+                    _loadOrders();
+                  },
+                  onError: (error) {
+                    widget.onMessage('Payment failed: $error', true);
+                  },
+                ),
+              );
+            }
+          } else {
+            // Cash on Delivery - no payment dialog needed
+            widget.onMessage(
+              'Order placed successfully! Order will remain PENDING until payment is confirmed.',
+              false,
             );
+            _clearForm();
+            _loadOrders();
           }
         } else {
           throw Exception(data['message'] ?? 'Failed to create order');
@@ -159,6 +165,15 @@ class _OrdersTabState extends State<OrdersTab> {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  void _clearForm() {
+    _addressController.clear();
+    setState(() {
+      _selectedProductId = 1;
+      _quantity = 1;
+      _paymentMethod = 'Cash on Delivery';
+    });
   }
 
   Future<void> _updateOrderStatus(int orderId, String newStatus) async {
@@ -396,6 +411,7 @@ class _OrdersTabState extends State<OrdersTab> {
                 const SizedBox(height: 12),
 
                 // Payment Method
+                // Payment Method
                 DropdownButtonFormField<String>(
                   value: _paymentMethod,
                   decoration: InputDecoration(
@@ -406,16 +422,85 @@ class _OrdersTabState extends State<OrdersTab> {
                     filled: true,
                     fillColor: Colors.white,
                     contentPadding: const EdgeInsets.all(12),
+                    prefixIcon: const Icon(Icons.payment),
                   ),
-                  items: ['Credit Card', 'Debit Card', 'Cash on Delivery']
-                      .map((method) => DropdownMenuItem(
-                    value: method,
-                    child: Text(method),
-                  ))
-                      .toList(),
+                  items: [
+                    DropdownMenuItem(
+                      value: 'Cash on Delivery',
+                      child: Row(
+                        children: [
+                          Icon(Icons.money, color: Colors.green.shade700, size: 20),
+                          const SizedBox(width: 8),
+                          const Text('Cash on Delivery'),
+                        ],
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Credit Card',
+                      child: Row(
+                        children: [
+                          Icon(Icons.credit_card, color: Colors.blue.shade700, size: 20),
+                          const SizedBox(width: 8),
+                          const Text('Credit Card'),
+                        ],
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Debit Card',
+                      child: Row(
+                        children: [
+                          Icon(Icons.credit_card, color: Colors.orange.shade700, size: 20),
+                          const SizedBox(width: 8),
+                          const Text('Debit Card'),
+                        ],
+                      ),
+                    ),
+                  ],
                   onChanged: (value) {
                     setState(() => _paymentMethod = value!);
                   },
+                ),
+                const SizedBox(height: 12),
+
+// Payment Info Banner
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: _paymentMethod == 'Cash on Delivery'
+                        ? Colors.green.shade50
+                        : Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: _paymentMethod == 'Cash on Delivery'
+                          ? Colors.green.shade200
+                          : Colors.blue.shade200,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _paymentMethod == 'Cash on Delivery' ? Icons.info : Icons.credit_card,
+                        color: _paymentMethod == 'Cash on Delivery'
+                            ? Colors.green.shade700
+                            : Colors.blue.shade700,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _paymentMethod == 'Cash on Delivery'
+                              ? 'Pay when you receive your order. Order status will remain PENDING until payment confirmed.'
+                              : 'You will be asked to enter your card details after creating the order.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: _paymentMethod == 'Cash on Delivery'
+                                ? Colors.green.shade700
+                                : Colors.blue.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 16),
 

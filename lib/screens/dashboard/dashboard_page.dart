@@ -276,14 +276,18 @@ class _DashboardPageState extends State<DashboardPage> {
               icon: const Icon(Icons.chat_bubble_outline),
               onPressed: () async {
                 final user = ApiService.currentUser;
+                print('🗨️ Opening chat for ${user?.fullName} (${user?.role})');
+
                 if (user?.isCustomer == true) {
                   // Customer chats directly with pharmacist
+                  print('📱 Customer opening direct chat');
                   await Navigator.push(
                     context,
                     MaterialPageRoute(builder: (context) => const ChatPage()),
                   );
                 } else {
                   // Pharmacist/Admin sees list of conversations
+                  print('📋 Staff opening chat list');
                   await Navigator.push(
                     context,
                     MaterialPageRoute(builder: (context) => const ChatListPage()),
